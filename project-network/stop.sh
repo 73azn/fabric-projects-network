@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Stops everything: REST API, Prometheus/Grafana (if running), orderer and peers.
+# Stops everything: REST API (container, or the Node process of --host-api), Prometheus/Grafana (if running), orderer and peers.
 # The ledgers and certificates are KEPT, so ./start.sh brings the same network back with all data.
 #
 #   ./stop.sh                  stop, keep data

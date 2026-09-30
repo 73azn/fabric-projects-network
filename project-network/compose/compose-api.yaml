@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# REST API as a container on the Fabric network. Used together with compose-project-net.yaml
+# (same Compose project "projectnet", same network "projects_net"):  ./network.sh api
+#
+#   - certificates are mounted read-only at /organizations (api/.env paths "../organizations/..." resolve to it)
+#   - settings come from api/.env; the addresses below replace the host ones (localhost:7051, ...) with container names
+#   - published on 127.0.0.1 only: the API has no authentication, see README "Security notes"
+
+services:
+  api:
+    container_name: projects-api
+    build:
+      context: ../api
+    image: projects-api:local
+    labels:
+      service: projects-api
+    # run as the host user so the read-only private keys (mode 600) can be read
+    user: "${API_UID:-1000}:${API_GID:-1000}"
+    env_file:
+      - ../api/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=4000
+      - PLATFORM_PEER_ENDPOINT=peer0.platform.example.com:7051
+      - ADMIN_PEER_ENDPOINT=peer0.adminorg.example.com:9051
+      - ORDERER_HEALTH_URL=http://orderer.example.com:9443/healthz
+      - PLATFORM_PEER_HEALTH_URL=http://peer0.platform.example.com:9444/healthz
+      - ADMIN_PEER_HEALTH_URL=http://peer0.adminorg.example.com:9445/healthz
+    volumes:
+      - ../organizations:/organizations:ro
+    ports:
+      - "127.0.0.1:${API_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - projects

@@ -4,7 +4,7 @@ A Hyperledger Fabric **3.1.5** network that tracks projects between an **owner**
 the work plan, the agreed price and the payments.
 
 ```
- curl / your app ──► REST API (Node.js + Express + fabric-gateway, :4000)
+ curl / your app ──► REST API (container "projects-api": Node.js + Express + fabric-gateway, :4000)
                          │  X-Org: platform | admin   (picks whose user signs the request)
                          ▼
         ┌──────────────────────────────────────────────┐   channel: projects-channel
@@ -32,7 +32,7 @@ cd project-network        # from the repository root
 ## 1. Requirements
 
 * **Docker** (Docker Desktop on macOS) – running.
-* **jq** (macOS ships `/usr/bin/jq`; Linux: `apt install jq`) and **Node.js 20+** (for the REST API).
+* **jq** (macOS ships `/usr/bin/jq`; Linux: `apt install jq`). **Node.js 20+** is only needed to run the unit tests or the API on the host (`--host-api`); the API normally runs in its own container.
 * The Fabric tarball **`hyperledger-fabric-linux-amd64-3.1.5.tar.gz`** in the repository root (not committed, it is 125 MB): copy it there, or run `../tools/build-tools-image.sh --download` once to fetch the official release and check its SHA-256. Nothing else about Fabric is downloaded except the Docker images below.
 
 The first `./start.sh` pulls `hyperledger/fabric-peer:3.1.5`, `hyperledger/fabric-orderer:3.1.5` and `hyperledger/fabric-nodeenv:2.5`
@@ -45,9 +45,10 @@ The same scripts therefore work on macOS (Apple Silicon runs the amd64 tools thr
 ## 2. Start and stop
 
 ```bash
-./start.sh                  # network + channel + chaincode + REST API  (http://localhost:4000)
+./start.sh                  # network + channel + chaincode + REST API, everything in Docker  (http://localhost:4000)
 ./start.sh --monitoring     # the same, plus Prometheus + Grafana
 ./start.sh --no-api         # network + channel + chaincode only
+./start.sh --host-api       # run the REST API with Node.js on this machine instead of in a container
 
 ./stop.sh                   # stops API, monitoring, peers, orderer. Ledgers + certificates are KEPT
 ./stop.sh --clean           # ALSO deletes ledgers, certificates, channel artifacts (asks first; add --yes to skip the question)
@@ -158,8 +159,13 @@ curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{"owner":"a","contractor":"b","ag
 curl -s -H 'X-Org: nobody' $B/projects/PRJ-001                                                                  # 400 bad X-Org
 ```
 
-Configuration lives in [`api/.env`](api/.env.example) (paths, peer addresses, MSP IDs, health URLs, port). `start.sh` creates it from `api/.env.example` if missing.
-Run by hand: `cd api && npm install && npm start`. Log of the background API: `api/api.log`. Tests: `cd api && npm test`.
+The API runs as the container **`projects-api`** (image built from [`api/Dockerfile`](api/Dockerfile), service in [`compose/compose-api.yaml`](compose/compose-api.yaml)) on the same Docker network as the peers,
+so it reaches them by name (`peer0.platform.example.com:7051`, `http://orderer.example.com:9443/healthz`, ...). Start/rebuild it alone with `./network.sh api`; logs: `docker logs -f projects-api`.
+The certificates are mounted read-only; the container runs as your user so it can read the keys. It is published on `127.0.0.1:4000` only.
+
+Configuration lives in [`api/.env`](api/.env.example) (MSP IDs, channel, chaincode, certificate paths, health timing, port). `start.sh` creates it from `api/.env.example` if missing;
+the peer and health addresses are overridden with container names in `compose/compose-api.yaml` (for `--host-api` the `localhost:` values in `.env` are used).
+After editing the code or `.env` run `./network.sh api` again. On the host: `cd api && npm install && npm start`. Tests: `cd api && npm test`.
 
 ## 5. Health
 
@@ -211,7 +217,7 @@ Right after a peer restarts, a *write* can return `503` for a few more seconds u
 ## 9. Security notes (read before putting this on a server)
 
 * **The REST API has no authentication.** `X-Org` only chooses which organization's user signs the transaction; anyone who can reach the port can write as Platform.
-  It therefore listens on `127.0.0.1` by default (`HOST` in `api/.env`). Put it behind a reverse proxy or firewall that authenticates callers before exposing it.
+  It is therefore published on `127.0.0.1:4000` only (the `ports:` line in `compose/compose-api.yaml`; with `--host-api`, `HOST` in `api/.env`). Put it behind a reverse proxy or firewall that authenticates callers before exposing it.
 * Grafana's login is the sample default `admin` / `admin` (`prometheus-grafana/grafana/config.monitoring`): change it, and don't publish ports 3000 / 9090.
 * The compose files publish the Fabric ports (7050, 7051, 7053, 9051, 9443–9445) on all interfaces; restrict them with a firewall on a public host.
 * Certificates are generated locally by `cryptogen` (development use) and are never committed: the repository's `.gitignore` excludes `organizations/peerOrganizations` and `organizations/ordererOrganizations`.

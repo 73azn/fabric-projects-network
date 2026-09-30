@@ -8,6 +8,7 @@
 #   ./network.sh up                 generate crypto (first time) and start orderer + 2 peers
 #   ./network.sh createChannel      create projects-channel, join both peers, set anchor peers
 #   ./network.sh deployCC           package/install/approve/commit the projectcc chaincode
+#   ./network.sh api                build + start the REST API container (joins the Fabric network)
 #   ./network.sh status             what is running
 #   ./network.sh down [-clean [-y]] stop the containers (-clean: ALSO delete ledgers, crypto, channel artifacts)
 #
@@ -31,6 +32,7 @@ else
   COMPOSE="docker compose"
 fi
 COMPOSE_FILES=(-f compose/compose-project-net.yaml -f compose/docker/docker-compose-project-net.yaml)
+API_COMPOSE_FILES=("${COMPOSE_FILES[@]}" -f compose/compose-api.yaml)
 
 # Docker socket the peers use to build/run chaincode containers
 SOCK="${DOCKER_HOST:-/var/run/docker.sock}"
@@ -46,6 +48,7 @@ printHelp() {
   println "    ${C_GREEN}up${C_RESET}             start the orderer and both peers (creates crypto material on first run)"
   println "    ${C_GREEN}createChannel${C_RESET}  create the channel, join both peers, set anchor peers (starts the network if needed)"
   println "    ${C_GREEN}deployCC${C_RESET}       install + approve (both orgs) + commit the chaincode; skipped if this version is already committed"
+  println "    ${C_GREEN}api${C_RESET}            build and start the REST API as a container (http://localhost:4000)"
   println "    ${C_GREEN}status${C_RESET}         show containers, channel membership and the committed chaincode"
   println "    ${C_GREEN}down${C_RESET}           stop and remove the containers (ledgers are kept)"
   println
@@ -164,6 +167,28 @@ deployCC() {
   [ $? -eq 0 ] || fatalln "Deploying chaincode failed"
 }
 
+startApi() {
+  docker version --format '{{.Server.Version}}' > /dev/null 2>&1 || fatalln "The Docker daemon is not running."
+  [ -f api/.env ] || cp api/.env.example api/.env
+  [ -d organizations/peerOrganizations ] || fatalln "No crypto material yet: run ./network.sh up first"
+  ensureImage "node:24-alpine"
+  export API_UID API_GID
+  API_UID=$(id -u); API_GID=$(id -g)
+  API_PORT=$(grep -E '^PORT=' api/.env | head -1 | cut -d= -f2 | tr -d ' \r'); export API_PORT=${API_PORT:-4000}
+  infoln "Building and starting the REST API container ..."
+  ${COMPOSE} "${API_COMPOSE_FILES[@]}" up -d --build api 2>&1 || fatalln "Could not start the API container"
+  local n
+  for n in $(seq 1 30); do
+    if curl -fs -o /dev/null "http://localhost:${API_PORT}/"; then
+      successln "REST API container is up: http://localhost:${API_PORT}  (logs: docker logs projects-api)"
+      return 0
+    fi
+    sleep 1
+  done
+  docker logs --tail 20 projects-api
+  fatalln "The REST API container did not answer on port ${API_PORT}"
+}
+
 networkStatus() {
   docker ps -a --filter label=service=hyperledger-fabric --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
   [ -d organizations/peerOrganizations ] || { warnln "No crypto material yet: run ./network.sh up"; return 0; }
@@ -195,7 +220,7 @@ networkDown() {
     fi
   fi
 
-  ${COMPOSE} "${COMPOSE_FILES[@]}" down --remove-orphans
+  ${COMPOSE} "${API_COMPOSE_FILES[@]}" down --remove-orphans
 
   # chaincode containers started by the peers (they are recreated on demand)
   docker rm -f $(docker ps -aq --filter name='dev-peer*') 2> /dev/null || true
@@ -242,6 +267,7 @@ case "$MODE" in
   up )            infoln "Starting nodes (images ${FABRIC_IMAGE_TAG})"; networkUp ;;
   createChannel ) infoln "Creating channel '${CHANNEL_NAME}'"; createChannel ;;
   deployCC )      infoln "Deploying chaincode '${CC_NAME}' on channel '${CHANNEL_NAME}'"; deployCC ;;
+  api )           infoln "Starting the REST API container"; startApi ;;
   status )        networkStatus ;;
   down )          infoln "Stopping network"; networkDown ;;
   * )             printHelp; exit 1 ;;

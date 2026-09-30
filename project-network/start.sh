@@ -5,19 +5,22 @@
 # Safe to run again: steps that are already done are skipped, so it also restarts a stopped network
 # with its ledgers intact.
 #
-#   ./start.sh                 network + channel + chaincode + REST API (http://localhost:4000)
+#   ./start.sh                 network + channel + chaincode + REST API, all in Docker (http://localhost:4000)
 #   ./start.sh --no-api        skip the REST API
+#   ./start.sh --host-api      run the REST API with Node.js on this machine instead of in a container
 #   ./start.sh --monitoring    also start Prometheus + Grafana (http://localhost:3000)
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 . scripts/utils.sh
 
 START_API=true
+API_IN_DOCKER=true
 START_MONITORING=false
 for arg in "$@"; do
   case "$arg" in
     --no-api) START_API=false ;;
+    --host-api) API_IN_DOCKER=false ;;
     --monitoring) START_MONITORING=true ;;
-    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fatalln "Unknown option: $arg (see ./start.sh --help)" ;;
   esac
 done
@@ -54,7 +57,13 @@ start_api() {
   return 1
 }
 
-[ "$START_API" = "true" ] && { start_api || exit 1; }
+if [ "$START_API" = "true" ]; then
+  if [ "$API_IN_DOCKER" = "true" ]; then
+    ./network.sh api || fatalln "Starting the REST API container failed"
+  else
+    start_api || exit 1
+  fi
+fi
 [ "$START_MONITORING" = "true" ] && ./start-monitoring.sh
 
 successln "Everything is up."

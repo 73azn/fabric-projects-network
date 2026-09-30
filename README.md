@@ -8,7 +8,7 @@ Full documentation, API examples (`curl` for every endpoint) and the health test
 
 ## Quick start (macOS or Linux)
 
-Needs Docker (running), `jq`, Node.js 20+, and the Fabric Linux tarball.
+Needs Docker (running), `jq`, and the Fabric Linux tarball. (Node.js is not needed: the API runs in a container.)
 
 ```bash
 git clone https://github.com/73azn/fabric-projects-network.git
@@ -31,8 +31,8 @@ curl -s localhost:4000/health
 | `bin/` | wrappers (`peer`, `configtxgen`, `cryptogen`, …) that run the real Fabric tools inside a Docker image, so the same scripts work on macOS and Linux |
 | `tools/` | `Dockerfile` + `build-tools-image.sh` that build that image from the official Fabric tarball |
 
-What runs in Docker: the orderer, both peers, the chaincode containers, the Fabric CLI tools and Prometheus/Grafana.
-The REST API runs with Node.js on the host.
+Everything runs in Docker: the orderer, both peers, the chaincode containers, the REST API (`projects-api`), the Fabric CLI tools and Prometheus/Grafana.
+Node.js is only needed on the host to run the unit tests or the API in `--host-api` mode.
 
 ## License
 
