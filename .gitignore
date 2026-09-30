@@ -1,0 +1,12 @@
+# Fabric binaries and config come from the official tarball (never committed; see tools/build-tools-image.sh)
+hyperledger-fabric-*.tar.gz
+tools/linux-amd64/
+config/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Node.js
+node_modules/

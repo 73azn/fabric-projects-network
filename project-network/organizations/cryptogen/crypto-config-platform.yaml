@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Crypto material for the Platform organization (1 peer + Admin + 1 user).
+# Generated with: cryptogen generate --config=<this file> --output=organizations
+# "Template.Count: 1" creates peer0.platform.example.com; "Users.Count: 1" creates
+# User1@platform.example.com (used by the REST API) in addition to Admin@.
+PeerOrgs:
+  - Name: Platform
+    Domain: platform.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1

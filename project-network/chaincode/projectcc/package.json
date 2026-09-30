@@ -1,0 +1,15 @@
+{
+  "name": "projectcc",
+  "version": "1.0.0",
+  "description": "Project tracking between an owner (client) and a contractor: work plan, agreed price, payments",
+  "main": "index.js",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "fabric-chaincode-node start",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "fabric-contract-api": "~2.5.8",
+    "fabric-shim": "~2.5.8"
+  }
+}

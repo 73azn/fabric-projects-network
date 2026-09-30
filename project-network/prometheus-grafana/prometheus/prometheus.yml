@@ -1,0 +1,19 @@
+# Scrapes the operations service (/metrics) of every Fabric node on the projects_net Docker network.
+global:
+  scrape_interval: 1s
+  external_labels:
+    monitor: 'projects-network-monitor'
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+  - job_name: "orderer"
+    static_configs:
+      - targets: ["orderer.example.com:9443"]
+  - job_name: "peer0_platform"
+    static_configs:
+      - targets: ["peer0.platform.example.com:9444"]
+  - job_name: "peer0_adminorg"
+    static_configs:
+      - targets: ["peer0.adminorg.example.com:9445"]

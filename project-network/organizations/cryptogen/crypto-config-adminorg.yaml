@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Crypto material for the AdminOrg organization (1 peer + Admin + 1 user).
+PeerOrgs:
+  - Name: AdminOrg
+    Domain: adminorg.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1

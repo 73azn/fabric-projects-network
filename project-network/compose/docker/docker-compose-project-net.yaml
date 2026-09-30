@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Overlay for the peers: lets them build/run chaincode containers through the host Docker daemon.
+# ${DOCKER_SOCK} is set by network.sh (default /var/run/docker.sock).
+
+services:
+  peer0.platform.example.com:
+    container_name: peer0.platform.example.com
+    image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG:-3.1.5}
+    labels:
+      service: hyperledger-fabric
+    environment:
+      #Generic peer variables
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=projects_net
+    volumes:
+      - ./docker/peercfg:/etc/hyperledger/peercfg
+      - ${DOCKER_SOCK}:/host/var/run/docker.sock
+
+  peer0.adminorg.example.com:
+    container_name: peer0.adminorg.example.com
+    image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG:-3.1.5}
+    labels:
+      service: hyperledger-fabric
+    environment:
+      #Generic peer variables
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=projects_net
+    volumes:
+      - ./docker/peercfg:/etc/hyperledger/peercfg
+      - ${DOCKER_SOCK}:/host/var/run/docker.sock

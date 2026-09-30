@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Runs one Fabric CLI tool inside the local "fabric-tools-local" image.
+#   bin/fabric-docker-run <tool> [args...]      (the bin/<tool> wrappers call this)
+#
+# - The whole repository (this folder's parent) and the current directory are mounted at the SAME absolute
+#   path inside the container, so every relative or absolute path used by the scripts still works.
+# - CORE_*, FABRIC_*, ORDERER_*, OSN_* environment variables are passed through.
+# - If the Docker network "projects_net" exists the container joins it, so peers and the orderer
+#   are reachable by name (peer0.platform.example.com:7051, orderer.example.com:7050, ...).
+set -euo pipefail
+
+TOOL="${1:?tool name required}"; shift
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SAMPLES_ROOT="$(dirname "$BIN_DIR")"
+IMAGE="${FABRIC_TOOLS_IMAGE:-fabric-tools-local:${FABRIC_VERSION:-3.1.5}}"
+NETWORK="${FABRIC_DOCKER_NETWORK:-projects_net}"
+
+args=(run --rm -i --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp
+      -v "${SAMPLES_ROOT}:${SAMPLES_ROOT}" -w "$PWD")
+
+case "$PWD/" in
+  "${SAMPLES_ROOT}/"*) ;;
+  *) args+=(-v "$PWD:$PWD") ;;
+esac
+
+if docker network inspect "$NETWORK" >/dev/null 2>&1; then
+  args+=(--network "$NETWORK")
+fi
+
+while IFS='=' read -r name _; do
+  case "$name" in
+    CORE_*|FABRIC_*|ORDERER_*|OSN_*|GODEBUG) args+=(-e "$name") ;;
+  esac
+done < <(env)
+
+exec docker "${args[@]}" "$IMAGE" "$TOOL" "$@"
