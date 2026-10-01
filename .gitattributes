@@ -1,0 +1,7 @@
+# Everything is text with LF endings: the scripts run inside Linux containers, where a Windows CRLF
+# would break them ("bash\r: No such file or directory"). Only the Windows launcher uses CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.png binary
+*.gz binary
+*.db binary

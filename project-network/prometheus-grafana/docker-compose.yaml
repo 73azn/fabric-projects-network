@@ -1,7 +1,12 @@
 # Prometheus + Grafana for the projects network. Start with ../start-monitoring.sh
 #   Grafana:    http://localhost:3000   (login: admin / admin)
 #   Prometheus: http://localhost:9090
+name: ${PN_PROJECT:-fabricprojects}-monitoring
+
 volumes:
+  workspace:
+    name: ${PN_WORKSPACE_VOLUME:-fabricprojects_workspace}
+    external: true
   prometheus_data: {}
   grafana_storage: {}
 
@@ -10,7 +15,12 @@ services:
     image: prom/prometheus:v2.32.1
     container_name: prometheus
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - type: volume
+        source: workspace
+        target: /etc/prometheus
+        read_only: true
+        volume:
+          subpath: project-network/prometheus-grafana/prometheus
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -30,7 +40,12 @@ services:
       - 3000:3000
     volumes:
       - grafana_storage:/var/lib/grafana
-      - ./grafana/provisioning/:/etc/grafana/provisioning/
+      - type: volume
+        source: workspace
+        target: /etc/grafana/provisioning
+        read_only: true
+        volume:
+          subpath: project-network/prometheus-grafana/grafana/provisioning
     env_file:
       - ./grafana/config.monitoring
     restart: always

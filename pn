@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+#
+# Launcher for macOS, Linux, WSL2 and Git Bash. The only requirement is Docker.
+#   ./pn start            build and start everything (network, channel, chaincode, REST API)
+#   ./pn stop             stop (data is kept)       ./pn stop --clean   also delete ledgers and certificates
+#   ./pn status | logs | monitoring | shell | net     (see: ./pn help)
+# On Windows use pn.cmd or pn.ps1 (PowerShell / cmd).
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'   # Git Bash must not rewrite /var/run/docker.sock
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE="projects-network-cli:local"
+PROJECT="${PN_PROJECT:-fabricprojects}"
+WORKSPACE="${PN_WORKSPACE_VOLUME:-${PROJECT}_workspace}"
+DOCKER_SOCK="${PN_DOCKER_SOCK:-/var/run/docker.sock}"
+
+die() { echo "pn: $*" >&2; exit 1; }
+
+command -v docker > /dev/null 2>&1 || die "Docker is not installed (https://docs.docker.com/get-docker/)"
+docker version --format '{{.Server.Version}}' > /dev/null 2>&1 || die "The Docker daemon is not running. Start Docker Desktop (or the docker service) and try again."
+
+# (Re)build the orchestrator image when it is missing or its files changed
+if command -v sha256sum > /dev/null 2>&1; then HASH=$(cat "$ROOT"/orchestrator/* | sha256sum | cut -c1-16); else HASH=$(cat "$ROOT"/orchestrator/* | shasum -a 256 | cut -c1-16); fi
+if ! docker image inspect "$IMAGE" --format '{{.Config.Labels}}' 2> /dev/null | grep -q "pn.hash:${HASH}"; then
+  echo "pn: building the orchestrator image (first run, needs internet) ..." >&2
+  docker build -q --label "pn.hash=${HASH}" -t "$IMAGE" "$ROOT/orchestrator" > /dev/null || die "could not build the orchestrator image"
+fi
+
+docker volume create "$WORKSPACE" > /dev/null
+
+TTY=(-i)
+if [ -t 0 ] && [ -t 1 ]; then TTY=(-it); fi
+
+exec docker run --rm "${TTY[@]}" \
+  -v "${DOCKER_SOCK}:/var/run/docker.sock" \
+  -v "${ROOT}:/src:ro" \
+  -v "${WORKSPACE}:/work" \
+  -e "PN_PROJECT=${PROJECT}" -e "PN_WORKSPACE_VOLUME=${WORKSPACE}" \
+  "$IMAGE" "$@"

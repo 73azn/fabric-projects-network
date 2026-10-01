@@ -3,7 +3,7 @@
 # REST API as a container on the Fabric network. Used together with compose-project-net.yaml
 # (same Compose project "projectnet", same network "projects_net"):  ./network.sh api
 #
-#   - certificates are mounted read-only at /organizations (api/.env paths "../organizations/..." resolve to it)
+#   - certificates are mounted read-only at /organizations from the workspace volume (api/.env paths "../organizations/..." resolve to it)
 #   - settings come from api/.env; the addresses below replace the host ones (localhost:7051, ...) with container names
 #   - published on 127.0.0.1 only: the API has no authentication, see README "Security notes"
 
@@ -15,8 +15,8 @@ services:
     image: projects-api:local
     labels:
       service: projects-api
-    # run as the host user so the read-only private keys (mode 600) can be read
-    user: "${API_UID:-1000}:${API_GID:-1000}"
+    # not root; the two User1 keys the API needs are made readable by network.sh after cryptogen
+    user: node
     env_file:
       - ../api/.env
     environment:
@@ -28,7 +28,12 @@ services:
       - PLATFORM_PEER_HEALTH_URL=http://peer0.platform.example.com:9444/healthz
       - ADMIN_PEER_HEALTH_URL=http://peer0.adminorg.example.com:9445/healthz
     volumes:
-      - ../organizations:/organizations:ro
+      - type: volume
+        source: workspace
+        target: /organizations
+        read_only: true
+        volume:
+          subpath: project-network/organizations
     ports:
       - "127.0.0.1:${API_PORT:-4000}:4000"
     healthcheck:

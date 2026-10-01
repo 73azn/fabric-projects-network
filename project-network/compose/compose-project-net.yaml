@@ -8,9 +8,15 @@
 #   peer0.platform.example.com     -> http://localhost:9444
 #   peer0.adminorg.example.com     -> http://localhost:9445
 
-name: projectnet
+name: ${PN_PROJECT:-fabricprojects}
 
+# Everything the containers need from the sources / generated files comes from ONE named volume ("workspace"),
+# created and filled by the pn launcher (see ../../orchestrator). Each service mounts only its own sub-folder,
+# so no host paths are involved and it behaves the same on Windows, macOS and Linux.
 volumes:
+  workspace:
+    name: ${PN_WORKSPACE_VOLUME:-fabricprojects_workspace}
+    external: true
   orderer.example.com:
   peer0.platform.example.com:
   peer0.adminorg.example.com:
@@ -53,9 +59,19 @@ services:
     working_dir: /root
     command: orderer
     volumes:
-        - ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/var/hyperledger/orderer/msp
-        - ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/:/var/hyperledger/orderer/tls
-        - orderer.example.com:/var/hyperledger/production/orderer
+      - type: volume
+        source: workspace
+        target: /var/hyperledger/orderer/msp
+        read_only: true
+        volume:
+          subpath: project-network/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp
+      - type: volume
+        source: workspace
+        target: /var/hyperledger/orderer/tls
+        read_only: true
+        volume:
+          subpath: project-network/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls
+      - orderer.example.com:/var/hyperledger/production/orderer
     ports:
       - 7050:7050
       - 7053:7053
@@ -91,7 +107,12 @@ services:
       - CHAINCODE_AS_A_SERVICE_BUILDER_CONFIG={"peername":"peer0platform"}
       - CORE_CHAINCODE_EXECUTETIMEOUT=300s
     volumes:
-      - ../organizations/peerOrganizations/platform.example.com/peers/peer0.platform.example.com:/etc/hyperledger/fabric
+      - type: volume
+        source: workspace
+        target: /etc/hyperledger/fabric
+        read_only: true
+        volume:
+          subpath: project-network/organizations/peerOrganizations/platform.example.com/peers/peer0.platform.example.com
       - peer0.platform.example.com:/var/hyperledger/production
     working_dir: /root
     command: peer node start
@@ -129,7 +150,12 @@ services:
       - CHAINCODE_AS_A_SERVICE_BUILDER_CONFIG={"peername":"peer0adminorg"}
       - CORE_CHAINCODE_EXECUTETIMEOUT=300s
     volumes:
-      - ../organizations/peerOrganizations/adminorg.example.com/peers/peer0.adminorg.example.com:/etc/hyperledger/fabric
+      - type: volume
+        source: workspace
+        target: /etc/hyperledger/fabric
+        read_only: true
+        volume:
+          subpath: project-network/organizations/peerOrganizations/adminorg.example.com/peers/peer0.adminorg.example.com
       - peer0.adminorg.example.com:/var/hyperledger/production
     working_dir: /root
     command: peer node start

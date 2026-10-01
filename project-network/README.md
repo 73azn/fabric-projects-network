@@ -23,42 +23,57 @@ the work plan, the agreed price and the payments.
 | Operations (`/healthz`, `/metrics`) | 9444 | 9445 | 9443 |
 | Can do | create, update, add payments, read | read | – |
 
-Everything below is run from this folder:
+**Everything runs in Docker. The only thing you need is Docker.** You start it with the launcher in the repository root:
 
-```bash
-cd project-network        # from the repository root
-```
+| Where | Command (from the repository root) |
+|---|---|
+| macOS, Linux, WSL2, Git Bash | `./pn start` |
+| Windows PowerShell | `.\pn.ps1 start` |
+| Windows cmd.exe | `pn.cmd start` |
 
-## 1. Requirements
+The examples below use `./pn`; on Windows replace it with `.\pn.ps1` or `pn.cmd`. The `curl` examples work in a Linux/macOS/WSL shell or Git Bash;
+in PowerShell use `curl.exe` (not the `curl` alias) with the JSON in single quotes, or `Invoke-RestMethod`.
 
-* **Docker** (Docker Desktop on macOS) – running.
-* **jq** (macOS ships `/usr/bin/jq`; Linux: `apt install jq`). **Node.js 20+** is only needed to run the unit tests or the API on the host (`--host-api`); the API normally runs in its own container.
-* The Fabric tarball **`hyperledger-fabric-linux-amd64-3.1.5.tar.gz`** in the repository root (not committed, it is 125 MB): copy it there, or run `../tools/build-tools-image.sh --download` once to fetch the official release and check its SHA-256. Nothing else about Fabric is downloaded except the Docker images below.
+## 1. Requirements and how it is packaged
 
-The first `./start.sh` pulls `hyperledger/fabric-peer:3.1.5`, `hyperledger/fabric-orderer:3.1.5` and `hyperledger/fabric-nodeenv:2.5`
-(the Node.js chaincode runtime; Fabric publishes no 3.1 tag of it) and builds a small local image `fabric-tools-local:3.1.5` from your tarball.
+* **Docker**: Docker Desktop (macOS, Windows with the WSL2 backend and *Linux containers*) or Docker Engine 26+ (Linux). Nothing else: no Bash, `jq`, Node.js or Fabric binaries on the host.
+* The Fabric tarball **`hyperledger-fabric-linux-amd64-3.1.5.tar.gz`** in the repository root (not committed, it is 125 MB), **or** run `./pn start --download-fabric` once to fetch the official release (checked against a pinned SHA-256). Nothing else about Fabric is downloaded except the Docker images below.
 
-**How the CLI tools run.** The tarball only contains Linux/amd64 binaries, which cannot run on macOS. So `../bin/peer`, `../bin/configtxgen`, `../bin/cryptogen`, … are small wrappers
-([`../bin/fabric-docker-run`](../bin/fabric-docker-run)) that run the real tool from the tarball inside `fabric-tools-local:3.1.5`, joined to the Fabric Docker network.
-The same scripts therefore work on macOS (Apple Silicon runs the amd64 tools through Docker's emulation) and on Linux. `../config` holds the `core.yaml` from the same tarball.
+How it works: `pn` builds a small **orchestrator** image ([`../orchestrator`](../orchestrator): Docker CLI + Compose + Bash + `jq`) and runs it with the host's Docker socket.
+The orchestrator runs the Bash scripts of this folder and starts the other containers next to itself. Your repository is copied into a Docker volume (`fabricprojects_workspace`)
+that also holds everything generated (certificates, channel artifacts, packaged chaincode); every container mounts only its own sub-folder of that volume.
+So no host paths, line endings or file permissions are involved, which is what makes it behave the same on Windows, macOS and Linux. The orchestrator re-copies your sources on every `./pn` call, so edits you make in the repository are picked up.
+
+The first `./pn start` pulls `hyperledger/fabric-peer:3.1.5`, `hyperledger/fabric-orderer:3.1.5`, `hyperledger/fabric-nodeenv:2.5`
+(the Node.js chaincode runtime; Fabric publishes no 3.1 tag of it), `docker:29-cli`, `node:24-alpine` and `debian:bookworm-slim`, and builds `fabric-tools-local:3.1.5` from your tarball.
+
+**How the Fabric CLI tools run.** The tarball only contains Linux/amd64 binaries. `../bin/peer`, `../bin/configtxgen`, `../bin/cryptogen`, … are small wrappers
+([`../bin/fabric-docker-run`](../bin/fabric-docker-run)) that run the real tool inside `fabric-tools-local:3.1.5`, joined to the Fabric Docker network
+(Apple Silicon and Windows-on-ARM run the amd64 tools through Docker's emulation).
 
 ## 2. Start and stop
 
 ```bash
-./start.sh                  # network + channel + chaincode + REST API, everything in Docker  (http://localhost:4000)
-./start.sh --monitoring     # the same, plus Prometheus + Grafana
-./start.sh --no-api         # network + channel + chaincode only
-./start.sh --host-api       # run the REST API with Node.js on this machine instead of in a container
+./pn start                  # network + channel + chaincode + REST API, everything in Docker  (http://localhost:4000)
+./pn start --monitoring     # the same, plus Prometheus + Grafana
+./pn start --no-api         # network + channel + chaincode only
+./pn start --download-fabric   # also download the Fabric 3.1.5 tarball if it is not in the repository folder
 
-./stop.sh                   # stops API, monitoring, peers, orderer. Ledgers + certificates are KEPT
-./stop.sh --clean           # ALSO deletes ledgers, certificates, channel artifacts (asks first; add --yes to skip the question)
+./pn status                 # containers, channel height of both peers, committed chaincode
+./pn logs [container]       # follow logs (default projects-api; e.g. orderer.example.com)
+./pn monitoring [--down]    # Prometheus + Grafana on/off
+./pn shell                  # a shell inside the orchestrator (peer CLI as an org admin: . ./setOrgEnv.sh platform)
+
+./pn stop                   # stops API, monitoring, peers, orderer. Ledgers + certificates are KEPT
+./pn stop --clean           # ALSO deletes ledgers, certificates, channel artifacts (asks first; add --yes to skip the question)
 ```
 
-`start.sh` is safe to run again: it generates certificates only the first time, skips a channel / chaincode that already exists, and after `stop.sh` it brings
-the same network back **with all data**. Changing `CC_VERSION` in [`network.config`](network.config) and running `./start.sh` upgrades the chaincode (new sequence, data is kept).
+`start` is safe to run again: it generates certificates only the first time, skips a channel / chaincode that already exists, and after `stop` it brings
+the same network back **with all data**. Changing `CC_VERSION` in [`network.config`](network.config) and running `./pn start` upgrades the chaincode (new sequence, data is kept).
+Individual steps: `./pn net up | createChannel | deployCC | status | down` (see `./pn net -h`).
 
-Individual steps: `./network.sh up | createChannel | deployCC | status | down` (see `./network.sh -h`).
-Peer CLI as an org admin: `. ./setOrgEnv.sh platform` then e.g. `../bin/peer channel list`.
+Where the data lives: the Docker volumes `fabricprojects_*` (ledgers, the workspace with the certificates) — nothing is written into the repository folder.
+`PN_PROJECT` (default `fabricprojects`) changes the name prefix if you want a second, separate copy.
 
 ## 3. Chaincode `projectcc`
 
@@ -91,7 +106,7 @@ dates must be real `YYYY-MM-DD` dates (`null` allowed for task dates; a task can
 **total payments can never exceed `agreedPrice`** (also when `agreedPrice` is updated); unknown fields are rejected.
 The caller's MSP ID decides who may write. The code is deterministic: no `Date`, `Date.now()` or random values (timestamps in the history are converted by hand from the transaction time); values are saved as JSON with sorted keys.
 
-Unit tests (no network needed): `cd chaincode/projectcc && npm install && npm test`.
+Unit tests (no network needed, Node.js 20+ on the host): `cd chaincode/projectcc && npm install && npm test`.
 
 ## 4. REST API
 
@@ -160,19 +175,19 @@ curl -s -H 'X-Org: nobody' $B/projects/PRJ-001                                  
 ```
 
 The API runs as the container **`projects-api`** (image built from [`api/Dockerfile`](api/Dockerfile), service in [`compose/compose-api.yaml`](compose/compose-api.yaml)) on the same Docker network as the peers,
-so it reaches them by name (`peer0.platform.example.com:7051`, `http://orderer.example.com:9443/healthz`, ...). Start/rebuild it alone with `./network.sh api`; logs: `docker logs -f projects-api`.
-The certificates are mounted read-only; the container runs as your user so it can read the keys. It is published on `127.0.0.1:4000` only.
+so it reaches them by name (`peer0.platform.example.com:7051`, `http://orderer.example.com:9443/healthz`, ...). Start/rebuild it alone with `./pn net api`; logs: `docker logs -f projects-api`.
+The certificates are mounted read-only from the workspace volume; the container runs as the non-root `node` user. It is published on `127.0.0.1:4000` only.
 
-Configuration lives in [`api/.env`](api/.env.example) (MSP IDs, channel, chaincode, certificate paths, health timing, port). `start.sh` creates it from `api/.env.example` if missing;
-the peer and health addresses are overridden with container names in `compose/compose-api.yaml` (for `--host-api` the `localhost:` values in `.env` are used).
-After editing the code or `.env` run `./network.sh api` again. On the host: `cd api && npm install && npm start`. Tests: `cd api && npm test`.
+Configuration lives in [`api/.env`](api/.env.example) (MSP IDs, channel, chaincode, certificate paths, health timing, port). `./pn start` creates it from `api/.env.example` if missing;
+the peer and health addresses are overridden with container names in `compose/compose-api.yaml`.
+After editing the code or `.env` run `./pn net api` (rebuilds and restarts only the API). Unit tests need Node.js 20+ on the host: `cd api && npm install && npm test`.
 
 ## 5. Health
 
 `GET /health` checks:
 
 * each node – `orderer`, `peer0.platform`, `peer0.adminorg` – through its operations service `GET /healthz` → `"up"` or `"down"`;
-* each peer's block height on `projects-channel` (`qscc` `GetChainInfo`) and whether the peers are in sync (same height). A 1-block gap is normal for a few seconds after a write, so it is tolerated for `SYNC_GRACE_SECONDS` (10 s, in `.env`); a bigger gap is unhealthy immediately.
+* each peer's block height on `projects-channel` (`qscc` `GetChainInfo`) and whether the peers are in sync (same height). A 1-block gap is normal for a few seconds after a write, so it is tolerated for `SYNC_GRACE_SECONDS` (10 s, in `api/.env`); a bigger gap is unhealthy immediately.
 
 **HTTP 200 `"healthy"`** if everything is OK, otherwise **HTTP 503 `"unhealthy"`** with `reasons`.
 
@@ -189,7 +204,7 @@ Right after a peer restarts, a *write* can return `503` for a few more seconds u
 ## 6. Prometheus + Grafana (live charts)
 
 ```bash
-./start-monitoring.sh            # needs the network running; stop with ./start-monitoring.sh --down (or ./stop.sh)
+./pn monitoring                  # needs the network running; stop with ./pn monitoring --down (or ./pn stop)
 ```
 
 * Grafana <http://localhost:3000> (login `admin` / `admin`) → dashboard **Projects Network – Fabric Performance**: chaincode requests, endorsements, block processing, blockchain height per node.
@@ -203,21 +218,26 @@ Right after a peer restarts, a *write* can return `503` for a few more seconds u
 * The sample's two default organizations were replaced by **Platform / AdminOrg** everywhere (crypto config, `configtx.yaml`, compose, scripts, connection profiles `organizations/peerOrganizations/*/connection-*.json|yaml`), channel `projects-channel`,
   chaincode endorsement policy `AND('PlatformMSP.peer','AdminOrgMSP.peer')` and channel policy `ALL Endorsement`. A case-insensitive search of this folder for the sample's old organization names finds nothing.
 * Left out of the copy because this network doesn't use them: the add-a-third-org sample, BFT, Fabric-CA/cfssl, CouchDB, podman files, the CaaS tutorial. Only cryptogen certificates and JavaScript chaincode are supported.
-* Docker images are pinned to `3.1.5`; network `projects_net`, Compose project `projectnet`.
-* CLI tools run in a container (section 1), so scripts address nodes by container name instead of `localhost`.
+* Docker images are pinned to `3.1.5`; network `projects_net`, Compose project `fabricprojects`.
+* The scripts, the CLI tools and the API all run in containers (section 1), so nodes are addressed by container name instead of `localhost`, and generated files live in a Docker volume instead of the repository folder.
 
 ## 8. Troubleshooting
 
-* **`docker pull` hangs with no output** (seen on this Mac): the Docker credential helper (`credsStore: desktop`) can block when the macOS keychain isn't reachable. Public images need no login, so run the script with a config that has no credential store:
-  `mkdir -p ~/.docker-nocreds && echo '{"auths":{}}' > ~/.docker-nocreds/config.json && ln -sfn ~/.docker/cli-plugins ~/.docker-nocreds/cli-plugins && DOCKER_CONFIG=~/.docker-nocreds ./start.sh`
-* **Ports in use** – the network uses 7050, 7051, 7053, 9051, 9443–9445, 4000 (API), 3000 and 9090 (monitoring). Stop the original `test-network` first (`./network.sh down` there) if it is running.
+* **Windows**: use Docker Desktop with the WSL2 backend and *Linux containers*, and run `.\pn.ps1 start` (PowerShell) or `pn.cmd start`. Git may check files out with CRLF line endings; `.gitattributes` forces LF and the orchestrator also converts them, so this needs no action.
+  If a port is refused, Windows may have reserved it: `netsh interface ipv4 show excludedportrange protocol=tcp` (the network uses 7050, 7051, 7053, 9051, 9443–9445, 4000, 3000, 9090). On WSL2 you can also just use `./pn` from the Ubuntu shell.
+* **`docker pull` hangs with no output** (seen on one Mac): the Docker credential helper (`credsStore: desktop`) can block when the macOS keychain isn't reachable. Public images need no login, so run `pn` with a config that has no credential store:
+  `mkdir -p ~/.docker-nocreds && echo '{"auths":{}}' > ~/.docker-nocreds/config.json && ln -sfn ~/.docker/cli-plugins ~/.docker-nocreds/cli-plugins && DOCKER_CONFIG=~/.docker-nocreds ./pn start`
+  (the pulls the orchestrator itself makes already run without credentials).
+* **"mount source subpath ... " / unknown volume option** – Docker is too old; the workspace volume needs Docker Engine 26+ (Docker Desktop 4.29+).
+* **Ports in use** – stop anything else on those ports, e.g. the original `test-network`.
 * **Stopped containers with random names** in `Created` state appear after chaincode deploys (Docker image build steps of the peers). They are harmless; `docker container prune` removes them.
-* `./stop.sh --clean` is the only command that deletes data. To start from zero: `./stop.sh --clean` then `./start.sh`.
+* `./pn stop --clean` is the only command that deletes data. To start from zero: `./pn stop --clean` then `./pn start`.
+* To look at the generated files: `./pn shell`, then `ls organizations/` (they are inside the workspace volume, not in the repository folder).
 
 ## 9. Security notes (read before putting this on a server)
 
 * **The REST API has no authentication.** `X-Org` only chooses which organization's user signs the transaction; anyone who can reach the port can write as Platform.
-  It is therefore published on `127.0.0.1:4000` only (the `ports:` line in `compose/compose-api.yaml`; with `--host-api`, `HOST` in `api/.env`). Put it behind a reverse proxy or firewall that authenticates callers before exposing it.
+  It is therefore published on `127.0.0.1:4000` only (the `ports:` line in `compose/compose-api.yaml`). Put it behind a reverse proxy or firewall that authenticates callers before exposing it.
 * Grafana's login is the sample default `admin` / `admin` (`prometheus-grafana/grafana/config.monitoring`): change it, and don't publish ports 3000 / 9090.
 * The compose files publish the Fabric ports (7050, 7051, 7053, 9051, 9443–9445) on all interfaces; restrict them with a firewall on a public host.
-* Certificates are generated locally by `cryptogen` (development use) and are never committed: the repository's `.gitignore` excludes `organizations/peerOrganizations` and `organizations/ordererOrganizations`.
+* Certificates are generated by `cryptogen` (development use) inside the Docker volume `fabricprojects_workspace`; they are never written into the repository, so they cannot be committed by accident.

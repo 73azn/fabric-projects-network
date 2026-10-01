@@ -13,7 +13,13 @@
 #   ./network.sh down [-clean [-y]] stop the containers (-clean: ALSO delete ledgers, crypto, channel artifacts)
 #
 # All Fabric CLIs (peer, configtxgen, ...) run in a container built from the Fabric 3.1.5 Linux tarball,
-# see ../bin and ../tools, so this works the same on macOS and Linux.
+# see ../bin and ../tools. This script itself runs inside the orchestrator container (../orchestrator), started by
+# the ../pn launchers, so the same code works on Windows, macOS and Linux. Run directly on a host it forwards to ../pn.
+
+# Not inside the orchestrator? Hand over to the launcher (it runs this script in a container).
+if [ -z "${PN_IN_CONTAINER:-}" ]; then
+  exec "$(cd "$(dirname "$0")/.." && pwd)/pn" net "$@"
+fi
 
 ROOTDIR="$(cd "$(dirname "$0")" && pwd)"
 SAMPLES_DIR="$(dirname "$ROOTDIR")"
@@ -25,6 +31,10 @@ cd "$ROOTDIR" || exit 1
 . scripts/utils.sh
 . ./network.config
 export FABRIC_IMAGE_TAG
+
+# Compose project and workspace volume (set by the pn launcher; these defaults match it)
+export PN_PROJECT="${PN_PROJECT:-fabricprojects}"
+export PN_WORKSPACE_VOLUME="${PN_WORKSPACE_VOLUME:-${PN_PROJECT}_workspace}"
 
 if command -v docker-compose > /dev/null 2>&1; then
   COMPOSE="docker-compose"
@@ -40,6 +50,18 @@ export DOCKER_SOCK="${SOCK##unix://}"
 
 NODES=(orderer.example.com peer0.platform.example.com peer0.adminorg.example.com)
 OPERATIONS_PORTS=(9443 9444 9445)
+
+# Inside the orchestrator "localhost" is the orchestrator itself, so it joins the Fabric Docker network and reaches
+# the nodes by container name. nodeUrl <container> <port> <path>
+joinNetwork() {
+  docker network connect projects_net "$(hostname)" > /dev/null 2>&1 || true
+}
+leaveNetwork() {
+  docker network disconnect -f projects_net "$(hostname)" > /dev/null 2>&1 || true
+}
+nodeUrl() {
+  echo "http://$1:$2$3"
+}
 
 printHelp() {
   println "Usage: ./network.sh <mode> [flags]"
@@ -88,7 +110,7 @@ checkPrereqs() {
   ensureImage "hyperledger/fabric-nodeenv:2.5"
 
   # CLI tools image built from the Fabric Linux tarball (skipped when it already exists)
-  "${SAMPLES_DIR}/tools/build-tools-image.sh" > /dev/null || fatalln "Could not build the Fabric tools image (see ../tools/build-tools-image.sh)"
+  "${SAMPLES_DIR}/tools/build-tools-image.sh" > /dev/null || fatalln "Could not build the Fabric tools image: put hyperledger-fabric-linux-amd64-3.1.5.tar.gz in the repository folder, or run: pn start --download-fabric"
 
   local local_version image_version
   local_version=$(peer version | sed -ne 's/^ Version: //p')
@@ -108,6 +130,8 @@ createOrgs() {
     infoln "Creating ${org} identities"
     cryptogen generate --config="./organizations/cryptogen/crypto-config-${org}.yaml" --output="organizations" || fatalln "Failed to generate certificates for ${org}"
   done
+  # the REST API container runs as a non-root user and needs to read the two User1 identities
+  chmod -R a+rX organizations/peerOrganizations/*/users/User1@*
   infoln "Generating connection profiles for Platform and AdminOrg"
   ./organizations/ccp-generate.sh
 }
@@ -116,12 +140,13 @@ createOrgs() {
 
 waitForNodes() {
   infoln "Waiting for the nodes to report healthy on their operations endpoints ..."
-  local i port n
+  local i port n url
   for i in "${!NODES[@]}"; do
     port=${OPERATIONS_PORTS[$i]}
+    url=$(nodeUrl "${NODES[$i]}" "$port" /healthz)
     for n in $(seq 1 30); do
-      if curl -fsS -o /dev/null "http://localhost:${port}/healthz"; then
-        successln "${NODES[$i]} is up (http://localhost:${port}/healthz)"
+      if curl -fs -o /dev/null "$url"; then
+        successln "${NODES[$i]} is up (host: http://localhost:${port}/healthz)"
         continue 2
       fi
       sleep 1
@@ -136,6 +161,7 @@ networkUp() {
     createOrgs
   fi
   ${COMPOSE} "${COMPOSE_FILES[@]}" up -d 2>&1
+  joinNetwork
   docker ps -a --filter label=service=hyperledger-fabric --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
   waitForNodes
 }
@@ -172,14 +198,13 @@ startApi() {
   [ -f api/.env ] || cp api/.env.example api/.env
   [ -d organizations/peerOrganizations ] || fatalln "No crypto material yet: run ./network.sh up first"
   ensureImage "node:24-alpine"
-  export API_UID API_GID
-  API_UID=$(id -u); API_GID=$(id -g)
   API_PORT=$(grep -E '^PORT=' api/.env | head -1 | cut -d= -f2 | tr -d ' \r'); export API_PORT=${API_PORT:-4000}
   infoln "Building and starting the REST API container ..."
   ${COMPOSE} "${API_COMPOSE_FILES[@]}" up -d --build api 2>&1 || fatalln "Could not start the API container"
+  joinNetwork
   local n
   for n in $(seq 1 30); do
-    if curl -fs -o /dev/null "http://localhost:${API_PORT}/"; then
+    if curl -fs -o /dev/null "$(nodeUrl projects-api 4000 /)"; then
       successln "REST API container is up: http://localhost:${API_PORT}  (logs: docker logs projects-api)"
       return 0
     fi
@@ -209,7 +234,8 @@ networkStatus() {
 
 networkDown() {
   if [ "$CLEAN" = "true" ]; then
-    warnln "-clean will DELETE: the ledgers (Docker volumes), organizations/peerOrganizations, organizations/ordererOrganizations,"
+    warnln "-clean will DELETE: the ledgers (Docker volumes ${PN_PROJECT}_*), the generated certificates"
+    warnln "                    (organizations/peerOrganizations and ordererOrganizations in the workspace volume),"
     warnln "                    channel-artifacts/, the packaged chaincode (*.tar.gz), and the generated chaincode images."
     if [ "$ASSUME_YES" != "true" ]; then
       read -r -p "Delete all of that? [y/N] " answer
@@ -220,13 +246,14 @@ networkDown() {
     fi
   fi
 
-  ${COMPOSE} "${API_COMPOSE_FILES[@]}" down --remove-orphans
-
   # chaincode containers started by the peers (they are recreated on demand)
   docker rm -f $(docker ps -aq --filter name='dev-peer*') 2> /dev/null || true
 
+  leaveNetwork
+  ${COMPOSE} "${API_COMPOSE_FILES[@]}" down --remove-orphans
+
   if [ "$CLEAN" = "true" ]; then
-    docker volume rm projectnet_orderer.example.com projectnet_peer0.platform.example.com projectnet_peer0.adminorg.example.com 2> /dev/null || true
+    docker volume rm "${PN_PROJECT}_orderer.example.com" "${PN_PROJECT}_peer0.platform.example.com" "${PN_PROJECT}_peer0.adminorg.example.com" 2> /dev/null || true
     docker image rm -f $(docker images -aq --filter reference='dev-peer*') 2> /dev/null || true
     rm -rf organizations/peerOrganizations organizations/ordererOrganizations channel-artifacts log.txt ./*.tar.gz
     successln "Network data deleted."
@@ -264,6 +291,7 @@ while [[ $# -ge 1 ]]; do
 done
 
 case "$MODE" in
+  -h|--help|help ) printHelp; exit 0 ;;
   up )            infoln "Starting nodes (images ${FABRIC_IMAGE_TAG})"; networkUp ;;
   createChannel ) infoln "Creating channel '${CHANNEL_NAME}'"; createChannel ;;
   deployCC )      infoln "Deploying chaincode '${CC_NAME}' on channel '${CHANNEL_NAME}'"; deployCC ;;

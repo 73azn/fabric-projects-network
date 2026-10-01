@@ -6,33 +6,39 @@ a JavaScript chaincode (`projectcc`), a REST API (Express + `@hyperledger/fabric
 
 Full documentation, API examples (`curl` for every endpoint) and the health test are in **[project-network/README.md](project-network/README.md)**.
 
-## Quick start (macOS or Linux)
+## Quick start (Windows, macOS, Linux)
 
-Needs Docker (running), `jq`, and the Fabric Linux tarball. (Node.js is not needed: the API runs in a container.)
+The only requirement is **Docker** (Docker Desktop with Linux containers on Windows/macOS). Nothing else is installed on your machine.
 
 ```bash
 git clone https://github.com/73azn/fabric-projects-network.git
 cd fabric-projects-network
 
-# Fabric 3.1.5 CLI tools: copy hyperledger-fabric-linux-amd64-3.1.5.tar.gz into this folder, or fetch the official release
-tools/build-tools-image.sh --download
+./pn start --download-fabric        # macOS / Linux / WSL2 / Git Bash   (first run: downloads the Fabric 3.1.5 tarball, pulls images)
+.\pn.ps1 start --download-fabric    # Windows PowerShell
+pn.cmd start --download-fabric      # Windows cmd.exe
 
-cd project-network
-./start.sh              # network + channel + chaincode + REST API on http://localhost:4000
-curl -s localhost:4000/health
-./stop.sh               # stop (data is kept);  ./stop.sh --clean  deletes ledgers and certificates
+curl -s localhost:4000/health       # {"status":"healthy", ...}
+./pn stop                           # stop (data is kept);  ./pn stop --clean  deletes ledgers and certificates
 ```
+
+If you already have `hyperledger-fabric-linux-amd64-3.1.5.tar.gz`, put it in this folder and leave out `--download-fabric` (later runs don't need it either way).
+More commands: `./pn status`, `./pn logs`, `./pn monitoring`, `./pn shell`, `./pn help`.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `project-network/` | the network: compose files, `configtx`, scripts, `chaincode/projectcc`, `api/`, `prometheus-grafana/`, `start.sh`, `stop.sh` |
-| `bin/` | wrappers (`peer`, `configtxgen`, `cryptogen`, …) that run the real Fabric tools inside a Docker image, so the same scripts work on macOS and Linux |
+| `pn`, `pn.ps1`, `pn.cmd` | launchers (Bash / PowerShell / cmd): build the orchestrator image and run it with the Docker socket |
+| `orchestrator/` | the image that runs the scripts: Docker CLI + Compose + Bash + jq, so the host needs only Docker |
+| `project-network/` | the network: compose files, `configtx`, scripts, `chaincode/projectcc`, `api/`, `prometheus-grafana/` |
+| `bin/` | wrappers (`peer`, `configtxgen`, `cryptogen`, …) that run the real Fabric tools inside a Docker image |
 | `tools/` | `Dockerfile` + `build-tools-image.sh` that build that image from the official Fabric tarball |
 
-Everything runs in Docker: the orderer, both peers, the chaincode containers, the REST API (`projects-api`), the Fabric CLI tools and Prometheus/Grafana.
-Node.js is only needed on the host to run the unit tests or the API in `--host-api` mode.
+Everything runs in Docker: the orchestrator, the orderer, both peers, the chaincode containers, the REST API (`projects-api`), the Fabric CLI tools and Prometheus/Grafana.
+Generated files (certificates, channel artifacts) and ledgers live in Docker volumes, not in this folder. Node.js is only needed on the host to run the unit tests.
+
+Full documentation, API examples (`curl` for every endpoint), the health test and Windows notes: **[project-network/README.md](project-network/README.md)**.
 
 ## License
 

@@ -2,11 +2,12 @@
 # Runs one Fabric CLI tool inside the local "fabric-tools-local" image.
 #   bin/fabric-docker-run <tool> [args...]      (the bin/<tool> wrappers call this)
 #
-# - The whole repository (this folder's parent) and the current directory are mounted at the SAME absolute
-#   path inside the container, so every relative or absolute path used by the scripts still works.
+# - The workspace (the folder that holds bin/, tools/, project-network/) and the current directory are mounted
+#   at the SAME absolute path inside the container, so every relative or absolute path used by the scripts
+#   still works. Inside the orchestrator the workspace is a Docker volume (PN_WORKSPACE_VOLUME), otherwise a host folder.
 # - CORE_*, FABRIC_*, ORDERER_*, OSN_* environment variables are passed through.
-# - If the Docker network "projects_net" exists the container joins it, so peers and the orderer
-#   are reachable by name (peer0.platform.example.com:7051, orderer.example.com:7050, ...).
+# - If the Docker network "projects_net" exists the container joins it, so peers and the orderer are reachable
+#   by name (peer0.platform.example.com:7051, orderer.example.com:7050, ...).
 set -euo pipefail
 
 TOOL="${1:?tool name required}"; shift
@@ -15,13 +16,17 @@ SAMPLES_ROOT="$(dirname "$BIN_DIR")"
 IMAGE="${FABRIC_TOOLS_IMAGE:-fabric-tools-local:${FABRIC_VERSION:-3.1.5}}"
 NETWORK="${FABRIC_DOCKER_NETWORK:-projects_net}"
 
-args=(run --rm -i --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp
-      -v "${SAMPLES_ROOT}:${SAMPLES_ROOT}" -w "$PWD")
+args=(run --rm -i --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp -w "$PWD")
 
-case "$PWD/" in
-  "${SAMPLES_ROOT}/"*) ;;
-  *) args+=(-v "$PWD:$PWD") ;;
-esac
+if [ -n "${PN_WORKSPACE_VOLUME:-}" ]; then
+  args+=(-v "${PN_WORKSPACE_VOLUME}:${SAMPLES_ROOT}")
+else
+  args+=(-v "${SAMPLES_ROOT}:${SAMPLES_ROOT}")
+  case "$PWD/" in
+    "${SAMPLES_ROOT}/"*) ;;
+    *) args+=(-v "$PWD:$PWD") ;;
+  esac
+fi
 
 if docker network inspect "$NETWORK" >/dev/null 2>&1; then
   args+=(--network "$NETWORK")

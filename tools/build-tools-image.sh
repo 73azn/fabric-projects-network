@@ -4,8 +4,8 @@
 #
 #   tools/build-tools-image.sh [--download] [path/to/hyperledger-fabric-linux-amd64-3.1.5.tar.gz]
 #
-# The tarball is looked for, in this order: the path argument, $FABRIC_TARBALL, the repository root
-# (the folder that contains bin/ tools/ project-network/), and the folder above it.
+# The tarball is looked for, in this order: the path argument, $FABRIC_TARBALL, the repository root on the host
+# (mounted at /src by the pn launcher), the workspace, and the folder above it.
 # Nothing is downloaded unless you pass --download: then the official release
 #   https://github.com/hyperledger/fabric/releases/download/v<version>/hyperledger-fabric-linux-amd64-<version>.tar.gz
 # is fetched into the repository root and checked against a pinned SHA-256.
@@ -16,10 +16,11 @@ TARBALL_SHA256_3_1_5="b9c31fd490991e76f8acb1835dee09fc19fee5428cb13e190ee6e0bdd2
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SAMPLES_DIR="$(dirname "$TOOLS_DIR")"
-IMAGE="fabric-tools-local:${FABRIC_VERSION}"
+IMAGE="${FABRIC_TOOLS_IMAGE:-fabric-tools-local:${FABRIC_VERSION}}"
 TARBALL_NAME="hyperledger-fabric-linux-amd64-${FABRIC_VERSION}.tar.gz"
 
 DOWNLOAD=false
+[ "${PN_DOWNLOAD_FABRIC:-}" = "true" ] && DOWNLOAD=true   # set by: pn start --download-fabric
 TARBALL_ARG=""
 for arg in "$@"; do
   case "$arg" in
@@ -34,13 +35,19 @@ sha256_of() {
 
 find_tarball() {
   local candidate
-  for candidate in "$TARBALL_ARG" "${FABRIC_TARBALL:-}" "${SAMPLES_DIR}/${TARBALL_NAME}" "${SAMPLES_DIR}/../${TARBALL_NAME}"; do
+  for candidate in "$TARBALL_ARG" "${FABRIC_TARBALL:-}" "/src/${TARBALL_NAME}" "${SAMPLES_DIR}/${TARBALL_NAME}" "${SAMPLES_DIR}/../${TARBALL_NAME}"; do
     if [ -n "$candidate" ] && [ -f "$candidate" ]; then echo "$candidate"; return 0; fi
   done
   return 1
 }
 
 need_extract() { [ ! -d "${TOOLS_DIR}/linux-amd64/bin" ]; }
+
+# The image already contains the matching config/ (built from the same tarball): reuse it, no tarball needed
+if docker image inspect "$IMAGE" > /dev/null 2>&1 && [ ! -d "${SAMPLES_DIR}/config" ]; then
+  mkdir -p "${SAMPLES_DIR}/config"
+  docker run --rm --platform linux/amd64 --entrypoint tar "$IMAGE" -C /etc/hyperledger/fabric -cf - . | tar -xf - -C "${SAMPLES_DIR}/config"
+fi
 
 if ! docker image inspect "$IMAGE" > /dev/null 2>&1 || [ ! -d "${SAMPLES_DIR}/config" ]; then
   if need_extract; then
@@ -58,7 +65,7 @@ if ! docker image inspect "$IMAGE" > /dev/null 2>&1 || [ ! -d "${SAMPLES_DIR}/co
     fi
     if [ -z "$TARBALL" ]; then
       echo "Fabric tarball ${TARBALL_NAME} not found." >&2
-      echo "Put it in ${SAMPLES_DIR}/ or run: tools/build-tools-image.sh --download" >&2
+      echo "Put it in the repository root, or run: pn start --download-fabric" >&2
       exit 1
     fi
     echo "Extracting $(basename "$TARBALL") ..."
