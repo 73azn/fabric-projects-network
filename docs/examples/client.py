@@ -1,9 +1,10 @@
 """Minimal client for the projects API. Python 3.8+, standard library only.
 
-    python docs/examples/client.py [base-url]        runs a short demo
+    python docs/examples/client.py [base-url]        runs a short demo (API_KEY=... if the server requires a key)
 or: from client import ProjectsClient
 """
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -19,13 +20,16 @@ class ApiError(Exception):
 
 
 class ProjectsClient:
-    def __init__(self, base_url="http://localhost:4000", org="platform"):
+    def __init__(self, base_url="http://localhost:4000", org="platform", api_key=os.environ.get("API_KEY")):
         self.base_url = base_url
+        self.api_key = api_key  # sent as "Authorization: Bearer <key>" when the server requires one
         self.org = org  # 'platform' can read and write, 'admin' can only read
 
     def _request(self, method, path, body=None):
         data = json.dumps(body).encode() if body is not None else None
         headers = {"X-Org": self.org}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         if data is not None:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(self.base_url + path, data=data, headers=headers, method=method)
@@ -60,6 +64,6 @@ if __name__ == "__main__":
     except ApiError as e:
         print("duplicate id ->", e)
     try:
-        ProjectsClient(api.base_url, "admin").add_payment(pid, {"id": "PAY-2", "amount": 1, "date": "2026-10-10"})
+        ProjectsClient(api.base_url, "admin", api.api_key).add_payment(pid, {"id": "PAY-2", "amount": 1, "date": "2026-10-10"})
     except ApiError as e:
         print("admin write  ->", e)

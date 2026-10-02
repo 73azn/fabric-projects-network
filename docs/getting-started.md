@@ -80,8 +80,8 @@ On Windows PowerShell: `.\docs\examples\crud-demo.ps1`. Other languages: [exampl
 Repeat sections 2–3 there: the project does not depend on anything of this computer. Notes:
 
 * **Each installation has its own ledger.** The data lives in Docker volumes (`fabricprojects_*`) on the machine where it runs; cloning the repository does not copy data.
-* **The API has no login.** By default it is reachable only from the same machine (`127.0.0.1:4000`). To use it from other machines, put it behind a reverse proxy or firewall
-  that authenticates callers. See [operations.md](operations.md#security).
+* **The API is only reachable from the same machine by default** (`127.0.0.1:4000`). To let another service call it, give the server a domain and an API key and start with `./pn start --domain chain.example.com`:
+  HTTPS is set up for you. See [operations.md](operations.md#making-it-reachable-from-the-internet-https--api-key). Open only SSH, 80 and 443 in the server's firewall.
 * Linux servers: the Fabric tools image is built for amd64. On an ARM server Docker needs QEMU emulation for it (see [troubleshooting.md](troubleshooting.md)); not tested here.
 
 ## 8. Where things are

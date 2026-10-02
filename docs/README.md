@@ -14,7 +14,7 @@ and every payment. Once written, nothing is silently changed: each change is a n
 | [architecture.md](architecture.md) | How it is built: containers, ports, volumes, how a write flows through the network. |
 | [troubleshooting.md](troubleshooting.md) | Something does not work. |
 | [openapi.yaml](openapi.yaml) | The API as an OpenAPI 3 file: import it into Postman, Insomnia or Swagger UI. |
-| [examples/](examples) | Ready-to-run scripts: `crud-demo.sh`, `crud-demo.ps1`, `client.js`, `client.py`. |
+| [examples/](examples) | Ready-to-run scripts: `crud-demo.sh`, `crud-demo.ps1`, `client.js`, `client.py`, and a [Supabase Edge Function](examples/supabase-edge-function) template. |
 
 ## The 60-second version
 

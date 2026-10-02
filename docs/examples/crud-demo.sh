@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Full walk-through of the API with curl: create, read, add payments, update, history, and the error cases.
 #   docs/examples/crud-demo.sh [base-url]        (default http://localhost:4000)
+#   If the server requires an API key:  API_KEY=... docs/examples/crud-demo.sh https://chain.example.com
 # Needs only curl (jq is used for pretty output when it is installed). It creates ONE project named PRJ-DEMO-<time>.
 set -u
 B="${1:-http://localhost:4000}"
 ID="PRJ-DEMO-$(date +%s)"
 J='Content-Type: application/json'
+AUTH=()
+if [ -n "${API_KEY:-}" ]; then AUTH=(-H "Authorization: Bearer $API_KEY"); fi
 
 pretty() { if command -v jq > /dev/null 2>&1; then jq .; else cat; fi; }
 
@@ -14,9 +17,9 @@ call() {
   local method=$1 path=$2 body=$3; shift 3
   local out code
   if [ -n "$body" ]; then
-    out=$(curl -s -w '\n%{http_code}' -X "$method" "$B$path" -H "$J" -d "$body" "$@")
+    out=$(curl -s -w '\n%{http_code}' -X "$method" "$B$path" -H "$J" -d "$body" ${AUTH[@]+"${AUTH[@]}"} "$@")
   else
-    out=$(curl -s -w '\n%{http_code}' -X "$method" "$B$path" "$@")
+    out=$(curl -s -w '\n%{http_code}' -X "$method" "$B$path" ${AUTH[@]+"${AUTH[@]}"} "$@")
   fi
   code=${out##*$'\n'}; out=${out%$'\n'*}
   echo "-> HTTP $code"

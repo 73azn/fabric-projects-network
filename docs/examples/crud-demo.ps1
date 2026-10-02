@@ -1,6 +1,7 @@
 # Full walk-through of the API from Windows PowerShell (5.1 or 7): create, read, add payments, update, history,
 # and the error cases. Nothing to install.
 #   .\docs\examples\crud-demo.ps1 [-Base http://localhost:4000]
+#   If the server requires an API key:  $env:API_KEY = '...'; .\docs\examples\crud-demo.ps1 -Base https://chain.example.com
 # It creates ONE project named PRJ-DEMO-<time>.
 param([string]$Base = 'http://localhost:4000')
 
@@ -9,6 +10,7 @@ $Id = 'PRJ-DEMO-' + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 # Call <method> <path> [body-as-hashtable] [headers]  -> prints "HTTP <code>" and the JSON answer
 function Call {
     param([string]$Method, [string]$Path, $Body = $null, [hashtable]$Headers = @{})
+    if ($env:API_KEY) { $Headers = @{} + $Headers; $Headers['Authorization'] = "Bearer $($env:API_KEY)" }
     $params = @{ Method = $Method; Uri = "$Base$Path"; Headers = $Headers; UseBasicParsing = $true }
     if ($null -ne $Body) {
         $params.Body = ($Body | ConvertTo-Json -Depth 10)

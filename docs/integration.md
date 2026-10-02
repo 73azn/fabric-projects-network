@@ -40,9 +40,20 @@ The total of the payments can never exceed the agreed price, and the price canno
 
 ## Who is calling
 
-The API has **no authentication**; it is meant to be called by your own backend, on the same machine or private network (it listens on `127.0.0.1` by default).
-Never call it from a browser or mobile app directly, and put an authenticating proxy in front of it if it must be reachable from elsewhere ([operations.md](operations.md#security)).
+The API is meant to be called by **your own backend** (a server, an Edge Function), never from a browser or a mobile app: whoever holds the API key can create projects and add payments.
+On the same machine or a private network it can run without a key; **when it is reachable from the internet it must have an `API_KEY` and sit behind HTTPS** (`./pn start --domain ...`, see [operations.md](operations.md#making-it-reachable-from-the-internet-https--api-key)), and every call sends `Authorization: Bearer <key>`.
 `X-Org: platform` (default) is the only identity that can write; `X-Org: admin` is read-only, useful for an auditor.
+
+## From a Supabase Edge Function
+
+A ready-to-deploy, tested template is in [examples/supabase-edge-function](examples/supabase-edge-function). It is a small relay with a fixed list of operations
+(`createProject`, `getProject`, `updateProject`, `addPayment`, `getHistory`, `health`) that
+
+* only accepts calls that carry the project's **service role** key (a database webhook, `pg_net`, another function), so the anon key and users' tokens can never write to the blockchain;
+* keeps the server address and the API key in Supabase **secrets**, never in code;
+* passes the blockchain server's answer through (same status code and JSON), so `409`, `400`, `503 Retry-After` etc. reach your code unchanged.
+
+Supabase does not publish fixed outbound IP addresses for Edge Functions, so **do not rely on an IP allow-list**: protect the server with HTTPS and the API key as described above.
 
 ## Reading back
 

@@ -31,6 +31,7 @@ curl -s http://localhost:4000/health
 | `curl: (7) Failed to connect to localhost port 4000` | The API is not running. `./pn start`, then check `docker ps` for `projects-api` and `./pn logs`. |
 | `/health` returns `503` | Read `reasons`: it names the node that is down. `docker ps -a` shows it; `./pn start` brings missing nodes back. After a restart give it up to half a minute. |
 | Write returns `503 NETWORK_UNAVAILABLE` | One of the two peers (or the orderer) is down or still reconnecting. Both organizations must approve every write. Check `/health`, wait a few seconds, retry. |
+| `401 UNAUTHORIZED` | The server requires an API key. Send `Authorization: Bearer <key>` (the exact header name; `X-API-Key` is not accepted). The key is the `API_KEY` in `project-network/api/.env` on the server. |
 | `403 FORBIDDEN` | You used `X-Org: admin`. The AdminOrg user can only read; use the default `platform` for writes. |
 | `404 NOT_FOUND` | The project id does not exist (ids are case-sensitive). |
 | `409 ALREADY_EXISTS` | That id is taken: choose another or update the existing one. |
@@ -38,6 +39,16 @@ curl -s http://localhost:4000/health
 | `400 INVALID_INPUT` | The message tells you what is wrong. The rules are in [data-model.md](data-model.md). Common ones: price or amount not above 0 or with more than 2 decimals, an unknown task `status`, a `done` task without `finishDate`, a date that does not exist, a payment that would go above the agreed price, a duplicate payment id. |
 | JSON problems on Windows | In PowerShell `curl` is an alias for `Invoke-WebRequest`. Use `Invoke-RestMethod` (examples in [api-reference.md](api-reference.md)) or `curl.exe` and put the JSON in a here-string or a file: `curl.exe -X POST … --data "@project.json"`. |
 | `500 INTERNAL_ERROR` | Look at `./pn logs` (or `docker logs projects-api`). |
+
+## HTTPS and the domain
+
+| Symptom | Cause and fix |
+|---|---|
+| `The proxy exposes the API to the internet, so it needs an API key` | `./pn start --domain …` refuses to run without a key. Run `./pn key`, put it in `project-network/api/.env` as `API_KEY=…` (add the line if the file is older and has none), then start again. |
+| The browser or `curl` says the certificate is invalid, or the connection is refused | The certificate is requested the first time the domain is used. Check, in this order: the `A` record points to the server's IP (`dig +short chain.example.com`), ports **80 and 443** are open in the provider's firewall, and nothing else on the server uses 80/443. Then read `./pn logs projects-proxy`. Let's Encrypt allows only a few attempts per hour, so fix the cause before retrying. |
+| `HTTP 308` redirects when calling `http://…` | Normal: port 80 redirects to HTTPS. Use `https://`. |
+| `./pn start --domain` fails with "port is already allocated" for 80/443 | Another web server runs on the host. Stop it, or put this API behind it instead. |
+| The API answers `401` on `/health` but `/livez` works | Correct: only `/livez` is public. Send the key. |
 
 ## Data
 

@@ -1,18 +1,23 @@
 // Minimal client for the projects API. Node.js 18+ (built-in fetch), no dependencies.
-//   node docs/examples/client.js [base-url]          runs a short demo
+//   node docs/examples/client.js [base-url]          runs a short demo (API_KEY=... if the server requires a key)
 // or:  const { ProjectsClient } = require('./client');
 'use strict';
 
 class ProjectsClient {
-    constructor(baseUrl = 'http://localhost:4000', org = 'platform') {
+    constructor(baseUrl = 'http://localhost:4000', org = 'platform', apiKey = process.env.API_KEY) {
         this.baseUrl = baseUrl;
+        this.apiKey = apiKey; // sent as "Authorization: Bearer <key>" when the server requires one
         this.org = org; // 'platform' can read and write, 'admin' can only read
     }
 
     async #request(method, path, body) {
         const res = await fetch(this.baseUrl + path, {
             method,
-            headers: { 'X-Org': this.org, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+            headers: {
+                'X-Org': this.org,
+                ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+                ...(body ? { 'Content-Type': 'application/json' } : {}),
+            },
             body: body ? JSON.stringify(body) : undefined,
         });
         const data = await res.json();
@@ -55,7 +60,7 @@ if (require.main === module) {
             console.log(`duplicate id -> HTTP ${e.status} ${e.code}: ${e.message}`);
         }
         try {
-            await new ProjectsClient(api.baseUrl, 'admin').addPayment(id, { id: 'PAY-2', amount: 1, date: '2026-10-07' });
+            await new ProjectsClient(api.baseUrl, 'admin', api.apiKey).addPayment(id, { id: 'PAY-2', amount: 1, date: '2026-10-07' });
         } catch (e) {
             console.log(`admin write -> HTTP ${e.status} ${e.code}`);
         }

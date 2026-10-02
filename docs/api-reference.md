@@ -16,7 +16,7 @@ There is **no delete**: that is by design. Projects stay on the ledger, and paym
 ## Conventions
 
 * **Who is calling** — header `X-Org: platform` (default) or `X-Org: admin`. `platform` can read and write; `admin` (the AdminOrg user) can only read: a write returns `403`.
-  There is **no password or token**: see [security](operations.md#security).
+  Whether a key is needed depends on the server: see [Authentication](#authentication).
 * **Money** — SAR with **at most 2 decimals** (like a database `numeric(12,2)` column), for example `250000`, `250000.75`, `99.99`; at most `9999999999.99`. Totals are exact. **Dates** — `YYYY-MM-DD`.
 * **Content type** — send `Content-Type: application/json` with a body.
 * **Writes take about a second or two**: both organizations must approve and the block has to be committed before the answer comes back.
@@ -28,6 +28,20 @@ There is **no delete**: that is by design. Projects stay on the ledger, and paym
   ```
 
   Windows PowerShell versions are shown for each call (use `Invoke-RestMethod`, not the `curl` alias).
+
+
+## Authentication
+
+* **On your own computer** the API listens on `127.0.0.1` and, unless you set a key, needs none: the examples below work as written.
+* **When the server has an `API_KEY`** (always the case when it is reachable from the internet) send it in every request, except `GET /livez`:
+
+  ```bash
+  curl -s -H "Authorization: Bearer $API_KEY" $B/projects/PRJ-001
+  ```
+
+  A missing, wrong or differently formatted key (for example a header named `X-API-Key`) gets `401` with `{"error": "...", "code": "UNAUTHORIZED"}` and a `WWW-Authenticate: Bearer` header.
+  In PowerShell: `Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:API_KEY" } "$B/projects/PRJ-001"`. Server setup: [operations.md](operations.md#making-it-reachable-from-the-internet-https--api-key).
+* `GET /livez` is always public and returns `{"status":"ok"}` (the server is up); it tells nothing about the network. Use `GET /health` (needs the key) for the detailed check.
 
 ---
 
@@ -259,6 +273,7 @@ Every error has the same shape: `{ "error": "<what is wrong>", "code": "<CODE>" 
 | HTTP | `code` | Meaning | Example |
 |---|---|---|---|
 | 400 | `INVALID_INPUT` | The data is wrong | `payment of 999999 would make the total paid (1049999.25) exceed the agreed price (300000.75)` |
+| 401 | `UNAUTHORIZED` | The server requires an API key and it is missing or wrong | send `Authorization: Bearer <key>` |
 | 403 | `FORBIDDEN` | This organization may not do that | `organization AdminOrgMSP is not allowed to create projects` |
 | 404 | `NOT_FOUND` | No such project (or route) | `project NOPE does not exist` |
 | 409 | `ALREADY_EXISTS` | The id is taken | `project PRJ-001 already exists` |

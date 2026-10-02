@@ -3,6 +3,14 @@
 The chaincode `projectcc` and the REST API change together. The chaincode version is set in
 `project-network/network.config` (`CC_VERSION`); `./pn start` upgrades a running network to the version in that file and keeps all data.
 
+## Server and API (after 1.3, chaincode unchanged)
+
+* **API key:** `API_KEY` in `api/.env`; when set, every request except `GET /livez` needs `Authorization: Bearer <key>` (else `401 UNAUTHORIZED`). `./pn key` generates one. Without a key nothing changes (the API stays open on localhost).
+* **`GET /livez`:** a public liveness check (`{"status":"ok"}`); Docker's healthcheck uses it.
+* **HTTPS:** `./pn start --domain chain.example.com` adds a Caddy proxy with an automatic Let's Encrypt certificate; it refuses to start without an API key.
+* **Restart policy:** the orderer, the peers, the API and the proxy come back by themselves after a server reboot.
+* **Example:** a tested Supabase Edge Function template (`docs/examples/supabase-edge-function`); the demo scripts and clients send the key when `API_KEY` is set.
+
 ## 1.3 — decimal amounts, task status
 
 * **Amounts can have 2 decimals** (SAR, like a database `numeric(12,2)` column, up to 9,999,999,999.99), for `agreedPrice` and payment `amount`. All sums are exact: they are done in halalas, so `0.1 + 0.2` is exactly `0.3`.
