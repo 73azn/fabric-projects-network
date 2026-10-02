@@ -1,7 +1,7 @@
 # Projects network
 
 A Hyperledger Fabric **3.1.5** network that tracks projects between an **owner** (the client) and a **contractor**:
-the work plan, the agreed price and the payments.
+who the two parties are (name, id and e-mail), the work plan, the agreed price and the payments.
 
 > **User documentation is in [`../docs`](../docs/README.md)** (getting started, API reference, data model, operations, troubleshooting). This file has the developer notes.
 
@@ -83,7 +83,9 @@ One asset per project, stored under its `id` (example after one payment):
 
 ```json
 {
-  "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
+  "id": "PRJ-001",
+  "owner": "Ahmed Ali", "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11", "ownerEmail": "ahmed.ali@example.com",
+  "contractor": "Al-Bina Co.", "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55", "contractorEmail": "info@al-bina.example.com",
   "agreedPrice": 250000, "currency": "SAR",
   "milestone": [
     { "description": "Dig and pour the foundation",     "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
@@ -97,13 +99,13 @@ One asset per project, stored under its `id` (example after one payment):
 |---|---|---|
 | `CreateProject(projectJson)` | Platform | New project, starts with no payments. Fails if the id exists. |
 | `ReadProject(id)` | both | Fails if missing. |
-| `UpdateProject(projectJson)` | Platform | Replaces owner / contractor / agreedPrice / currency / milestone. Cannot change the id or the payments (payments may be sent back unchanged, anything else is rejected). `agreedPrice` can't go below what is already paid. Fails if missing. |
+| `UpdateProject(projectJson)` | Platform | Replaces owner and contractor (name, id, e-mail) / agreedPrice / currency / milestone. Cannot change the id or the payments (payments may be sent back unchanged, anything else is rejected). `agreedPrice` can't go below what is already paid. Fails if missing. |
 | `AddPayment(id, paymentJson)` | Platform | Append-only: payments can never be edited or deleted. Fails if the project is missing. |
 | `ProjectExists(id)` | both | `true` / `false`. |
 | `GetProjectHistory(id)` | both | Every version on the ledger, oldest first: `[{txId, timestamp, isDelete, value}]`. |
 
 Validation (all errors start with a code: `INVALID_INPUT`, `NOT_FOUND`, `ALREADY_EXISTS`, `FORBIDDEN`):
-required `id`, `owner`, `contractor`, `agreedPrice`, task `description`; `id` = letters/digits/`.`/`_`/`-` (max 64); money = SAR with at most 2 decimals (like a database `numeric(12,2)` column), `agreedPrice > 0`, payment `amount > 0`; task `status` = proposed / accepted / done / approved / rejected, `finishDate` only for done / approved; task `description` up to 5000 characters;
+required `id`, `owner`, `ownerId`, `ownerEmail`, `contractor`, `contractorId`, `contractorEmail`, `agreedPrice`, task `description` (ids like a project `id`; e-mails like `name@example.com`; the owner and the contractor must be different people: `ownerId` ≠ `contractorId`); `id` = letters/digits/`.`/`_`/`-` (max 64); money = SAR with at most 2 decimals (like a database `numeric(12,2)` column), `agreedPrice > 0`, payment `amount > 0`; task `status` = proposed / accepted / done / approved / rejected, `finishDate` only for done / approved; task `description` up to 5000 characters;
 dates must be real `YYYY-MM-DD` dates (`null` allowed for task dates; a task can't have `finishDate` without `startDate`, nor finish before start); payment ids unique per project;
 **total payments can never exceed `agreedPrice`** (also when `agreedPrice` is updated); unknown fields are rejected.
 The caller's MSP ID decides who may write. The code is deterministic: no `Date`, `Date.now()` or random values (timestamps in the history are converted by hand from the transaction time); values are saved as JSON with sorted keys.
@@ -132,7 +134,10 @@ J='Content-Type: application/json'
 
 # Create (Platform)                                                          -> 201
 curl -s -X POST $B/projects -H "$J" -d '{
-  "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.", "agreedPrice": 250000, "currency": "SAR",
+  "id": "PRJ-001",
+  "owner": "Ahmed Ali", "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11", "ownerEmail": "ahmed.ali@example.com",
+  "contractor": "Al-Bina Co.", "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55", "contractorEmail": "info@al-bina.example.com",
+  "agreedPrice": 250000, "currency": "SAR",
   "milestone": [
     {"description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20"},
     {"description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null}
@@ -150,7 +155,9 @@ curl -s -X POST $B/projects/PRJ-001/payments -H "$J" \
 
 # Update (replaces the data; payments untouched)                            -> 200
 curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
-  "owner": "Ahmed Ali", "contractor": "Al-Bina Co.", "agreedPrice": 300000, "currency": "SAR",
+  "owner": "Ahmed Ali", "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11", "ownerEmail": "ahmed.ali@example.com",
+  "contractor": "Al-Bina Co.", "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55", "contractorEmail": "info@al-bina.example.com",
+  "agreedPrice": 300000, "currency": "SAR",
   "milestone": [
     {"description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20"},
     {"description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": "2026-11-15"},
@@ -164,15 +171,17 @@ curl -s $B/projects/PRJ-001/history | jq .
 curl -s -i $B/health
 ```
 
-Error cases (all verified):
+Error cases (all verified). `$P` is the two parties (name, id and e-mail each):
 
 ```bash
-curl -s -X POST $B/projects -H "$J" -d '{"id":"PRJ-001","owner":"x","contractor":"y","agreedPrice":1}'       # 409 ALREADY_EXISTS
+P='"owner":"Ahmed Ali","ownerId":"5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11","ownerEmail":"ahmed.ali@example.com","contractor":"Al-Bina Co.","contractorId":"9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55","contractorEmail":"info@al-bina.example.com"'
+curl -s -X POST $B/projects -H "$J" -d '{"id":"PRJ-001",'"$P"',"agreedPrice":1}'                              # 409 ALREADY_EXISTS
+curl -s -X POST $B/projects -H "$J" -d '{"id":"PRJ-002","owner":"a","contractor":"b","agreedPrice":1}'         # 400 the ids and e-mails of the two parties are required
 curl -s -X POST $B/projects/PRJ-001/payments -H "$J" -d '{"id":"PAY-9","amount":999999,"date":"2026-10-10"}'   # 400 total would exceed the agreed price
 curl -s -X POST $B/projects/PRJ-001/payments -H "$J" -d '{"id":"PAY-1","amount":1,"date":"2026-10-10"}'        # 400 duplicate payment id
 curl -s $B/projects/NOPE                                                                                        # 404
-curl -s -X POST -H 'X-Org: admin' $B/projects -H "$J" -d '{"id":"P","owner":"a","contractor":"b","agreedPrice":1}'  # 403 AdminOrg can't write
-curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{"owner":"a","contractor":"b","agreedPrice":300000,"payments":[]}'    # 400 payments can't be changed
+curl -s -X POST -H 'X-Org: admin' $B/projects -H "$J" -d '{"id":"P",'"$P"',"agreedPrice":1}'  # 403 AdminOrg can't write
+curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{'"$P"',"agreedPrice":300000,"payments":[]}'    # 400 payments can't be changed
 curl -s -H 'X-Org: nobody' $B/projects/PRJ-001                                                                  # 400 bad X-Org
 ```
 

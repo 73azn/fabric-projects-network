@@ -26,7 +26,8 @@ class ProjectContract extends Contract {
 
     /**
      * Creates a new project. The project starts with no payments.
-     * @param {string} projectJson JSON: { id, owner, contractor, agreedPrice, currency?, milestone? }
+     * @param {string} projectJson JSON: { id, owner, ownerId, ownerEmail, contractor, contractorId, contractorEmail,
+     *                                     agreedPrice, currency?, milestone? }
      */
     async CreateProject(ctx, projectJson) {
         this._requireMsp(ctx, WRITER_MSPS, 'create projects');
@@ -45,7 +46,7 @@ class ProjectContract extends Contract {
     }
 
     /**
-     * Replaces the project data (owner, contractor, agreedPrice, currency, milestone).
+     * Replaces the project data (owner and contractor with their ids and e-mails, agreedPrice, currency, milestone).
      * The id and the payments can never be changed here. "payments" may be sent back unchanged.
      * @param {string} projectJson JSON with the same shape as CreateProject (id identifies the project)
      */

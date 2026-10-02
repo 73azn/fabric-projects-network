@@ -31,7 +31,15 @@ const MAX_DESCRIPTION = 5000; // typical database text limit
 const TASK_STATUSES = ['proposed', 'accepted', 'done', 'approved', 'rejected'];
 const FINISHED_STATUSES = ['done', 'approved'];
 
-const PROJECT_FIELDS = ['id', 'owner', 'contractor', 'agreedPrice', 'currency', 'milestone', 'payments'];
+// One simple, deterministic check: something@something.tld, no spaces (the authoritative address check is the sender's)
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_EMAIL = 254; // the usual limit for an e-mail address
+
+// owner / contractor = display names; ownerId / contractorId = the stable ids in the marketplace database;
+// ownerEmail / contractorEmail = their e-mail addresses
+const PARTY_FIELDS = ['ownerId', 'ownerEmail', 'contractorId', 'contractorEmail'];
+const PROJECT_FIELDS = ['id', 'owner', 'ownerId', 'ownerEmail', 'contractor', 'contractorId', 'contractorEmail',
+    'agreedPrice', 'currency', 'milestone', 'payments'];
 const TASK_FIELDS = ['description', 'startDate', 'finishDate', 'status'];
 const PAYMENT_FIELDS = ['id', 'amount', 'date', 'note'];
 
@@ -83,9 +91,19 @@ function requireText(value, name, what, max = MAX_TEXT) {
     return value;
 }
 
-function requireId(value, what) {
+function requireId(value, what, name = 'id') {
     if (typeof value !== 'string' || !ID_PATTERN.test(value)) {
-        throw invalid(`${what}: "id" is required and must match ${ID_PATTERN} (letters, digits, dot, underscore, dash; max 64)`);
+        throw invalid(`${what}: "${name}" is required and must match ${ID_PATTERN} (letters, digits, dot, underscore, dash; max 64)`);
+    }
+    return value;
+}
+
+function requireEmail(value, name, what) {
+    if (typeof value !== 'string' || !EMAIL_PATTERN.test(value)) {
+        throw invalid(`${what}: "${name}" is required and must be an e-mail address such as name@example.com`);
+    }
+    if (value.length > MAX_EMAIL) {
+        throw invalid(`${what}: "${name}" is too long (max ${MAX_EMAIL} characters)`);
     }
     return value;
 }
@@ -169,8 +187,16 @@ function normalizeTask(task) {
     return { ...rest, status };
 }
 
+/**
+ * Projects stored before version 1.4 have no owner / contractor ids and e-mails: they read as "" (not recorded)
+ * until the project is updated with real values. Pure function, used when reading.
+ */
 function normalizeProject(project) {
-    return { ...project, milestone: (project.milestone || []).map(normalizeTask) };
+    const parties = {};
+    for (const field of PARTY_FIELDS) {
+        parties[field] = typeof project[field] === 'string' ? project[field] : '';
+    }
+    return { ...project, ...parties, milestone: (project.milestone || []).map(normalizeTask) };
 }
 
 /** Total of the payments in SAR (exact: summed in halalas). */
@@ -190,7 +216,14 @@ function validateProjectInput(input, what) {
 
     const id = requireId(input.id, what);
     const owner = requireText(input.owner, 'owner', what);
+    const ownerId = requireId(input.ownerId, what, 'ownerId');
+    const ownerEmail = requireEmail(input.ownerEmail, 'ownerEmail', what);
     const contractor = requireText(input.contractor, 'contractor', what);
+    const contractorId = requireId(input.contractorId, what, 'contractorId');
+    const contractorEmail = requireEmail(input.contractorEmail, 'contractorEmail', what);
+    if (ownerId === contractorId) {
+        throw invalid(`${what}: the owner and the contractor must be different (ownerId and contractorId are equal)`);
+    }
     const agreedPrice = requireMoney(input.agreedPrice, 'agreedPrice', what);
 
     const currency = input.currency === undefined ? CURRENCY : input.currency;
@@ -206,7 +239,10 @@ function validateProjectInput(input, what) {
         milestone = input.milestone.map(validateTask);
     }
 
-    return { id, owner, contractor, agreedPrice, currency, milestone, payments: input.payments };
+    return {
+        id, owner, ownerId, ownerEmail, contractor, contractorId, contractorEmail,
+        agreedPrice, currency, milestone, payments: input.payments,
+    };
 }
 
 function validatePaymentInput(input) {

@@ -45,7 +45,10 @@ Deno.test('only the service role may call it (anon key, user tokens, no token: 4
 
 Deno.test('every action becomes exactly the right REST call, with the API key and X-Org', async () => {
   await withUpstream(() => ok({ ok: true }), async (seen) => {
-    const project = { id: 'PRJ-1', owner: 'a', contractor: 'b', agreedPrice: 100.5 };
+    const project = {
+      id: 'PRJ-1', owner: 'a', ownerId: 'USR-1', ownerEmail: 'a@example.com',
+      contractor: 'b', contractorId: 'USR-2', contractorEmail: 'b@example.com', agreedPrice: 100.5,
+    };
     await call({ action: 'health' });
     await call({ action: 'createProject', data: project });
     await call({ action: 'getProject', id: 'PRJ-1' });

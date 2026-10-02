@@ -3,6 +3,16 @@
 The chaincode `projectcc` and the REST API change together. The chaincode version is set in
 `project-network/network.config` (`CC_VERSION`); `./pn start` upgrades a running network to the version in that file and keeps all data.
 
+## 1.4 — owner and contractor ids and e-mails
+
+* Every project now records **who the two parties are**, not only their names: `ownerId`, `ownerEmail`, `contractorId`, `contractorEmail` (next to `owner` and `contractor`, which stay the display names).
+* **All four are required** on create and update. Ids follow the project-id rules (letters, digits, `.` `_` `-`, up to 64 characters; a uuid fits); an e-mail must look like `name@example.com` (at most 254 characters).
+* **The owner and the contractor must be different:** `ownerId` and `contractorId` cannot be equal.
+* The API returns the four fields in every project, in this order: `id`, `owner`, `ownerId`, `ownerEmail`, `contractor`, `contractorId`, `contractorEmail`, `agreedPrice`, …
+* Projects stored by earlier versions read with `""` (not recorded) for the four fields; fill them in with the first update. Payments can be added to them as before.
+* **Breaking:** `POST` and `PUT /projects` without the four fields now get `400`. Update your callers (the examples in `docs/examples` and the Supabase template already send them).
+* Privacy: names, ids and e-mails are stored **permanently** in every version; see [data-model.md](data-model.md#privacy-what-is-stored-forever).
+
 ## Server and API (after 1.3, chaincode unchanged)
 
 * **API key:** `API_KEY` in `api/.env`; when set, every request except `GET /livez` needs `Authorization: Bearer <key>` (else `401 UNAUTHORIZED`). `./pn key` generates one. Without a key nothing changes (the API stays open on localhost).

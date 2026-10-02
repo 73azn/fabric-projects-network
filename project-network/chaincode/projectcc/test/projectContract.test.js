@@ -39,10 +39,20 @@ function makeCtx(msp = 'PlatformMSP', state = new Map(), history = new Map()) {
     };
 }
 
+// short fixture for tests that do not care about the people
+const PARTIES = {
+    owner: 'o', ownerId: 'USR-OWNER', ownerEmail: 'owner@example.com',
+    contractor: 'c', contractorId: 'USR-CONTRACTOR', contractorEmail: 'contractor@example.com',
+};
+
 const PROJECT = {
     id: 'PRJ-001',
     owner: 'Ahmed Ali',
+    ownerId: '5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11',
+    ownerEmail: 'ahmed.ali@example.com',
     contractor: 'Al-Bina Co.',
+    contractorId: '9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55',
+    contractorEmail: 'info@al-bina.example.com',
     agreedPrice: 250000,
     currency: 'SAR',
     milestone: [
@@ -70,12 +80,12 @@ test('CreateProject stores a project with no payments and sorted keys', async ()
 test('CreateProject defaults currency to SAR, milestone to [] and dates to null', async () => {
     const ctx = makeCtx();
     await contract.CreateProject(ctx, JSON.stringify({
-        id: 'P2', owner: 'A', contractor: 'B', agreedPrice: 10, milestone: [{ description: 'x' }],
+        id: 'P2', ...PARTIES, agreedPrice: 10, milestone: [{ description: 'x' }],
     }));
     const p = JSON.parse(ctx.state.get('P2').toString());
     assert.equal(p.currency, 'SAR');
     assert.deepEqual(p.milestone, [{ description: 'x', finishDate: null, startDate: null, status: 'proposed' }]);
-    await contract.CreateProject(ctx, JSON.stringify({ id: 'P3', owner: 'A', contractor: 'B', agreedPrice: 10 }));
+    await contract.CreateProject(ctx, JSON.stringify({ id: 'P3', ...PARTIES, agreedPrice: 10 }));
     assert.deepEqual(JSON.parse(ctx.state.get('P3').toString()).milestone, []);
 });
 
@@ -100,6 +110,22 @@ test('CreateProject validates required fields and types', async () => {
         { ...PROJECT, owner: '' },
         { ...PROJECT, owner: '   ' },
         { ...PROJECT, contractor: undefined },
+        { ...PROJECT, ownerId: undefined },
+        { ...PROJECT, ownerId: '' },
+        { ...PROJECT, ownerId: 'has space' },
+        { ...PROJECT, ownerId: 42 },
+        { ...PROJECT, ownerEmail: undefined },
+        { ...PROJECT, ownerEmail: '' },
+        { ...PROJECT, ownerEmail: 'not-an-email' },
+        { ...PROJECT, ownerEmail: 'no-domain@' },
+        { ...PROJECT, ownerEmail: 'no-dot@example' },
+        { ...PROJECT, ownerEmail: 'with space@example.com' },
+        { ...PROJECT, ownerEmail: `a@${'b'.repeat(250)}.com` },     // longer than 254 characters
+        { ...PROJECT, contractorId: undefined },
+        { ...PROJECT, contractorId: '-starts-with-dash' },
+        { ...PROJECT, contractorEmail: undefined },
+        { ...PROJECT, contractorEmail: 'x@y' },
+        { ...PROJECT, contractorId: PROJECT.ownerId },              // the owner cannot also be the contractor
         { ...PROJECT, agreedPrice: undefined },
         { ...PROJECT, agreedPrice: 0 },
         { ...PROJECT, agreedPrice: -5 },
@@ -173,7 +199,7 @@ test('UpdateProject replaces data, keeps id and payments, fails if missing', asy
     await contract.CreateProject(ctx, JSON.stringify(PROJECT));
     await contract.AddPayment(ctx, 'PRJ-001', JSON.stringify(PAYMENT));
 
-    const updated = { id: 'PRJ-001', owner: 'Ahmed A.', contractor: 'New Co', agreedPrice: 300000, milestone: [{ description: 'Only task' }] };
+    const updated = { id: 'PRJ-001', ...PARTIES, owner: 'Ahmed A.', contractor: 'New Co', agreedPrice: 300000, milestone: [{ description: 'Only task' }] };
     await contract.UpdateProject(ctx, JSON.stringify(updated));
     const p = JSON.parse(ctx.state.get('PRJ-001').toString());
     assert.equal(p.owner, 'Ahmed A.');
@@ -250,7 +276,7 @@ test('isoFromTimestamp converts epoch seconds without Date', () => {
 });
 
 test('money: SAR with at most 2 decimals, like a numeric(12,2) database column', async () => {
-    const create = (id, agreedPrice) => contract.CreateProject(makeCtx(), JSON.stringify({ id, owner: 'o', contractor: 'c', agreedPrice }));
+    const create = (id, agreedPrice) => contract.CreateProject(makeCtx(), JSON.stringify({ id, ...PARTIES, agreedPrice }));
     for (const ok of [1, 0.01, 100.5, 1234.56, 9999999999.99]) {
         await create('M', ok);
     }
@@ -261,22 +287,22 @@ test('money: SAR with at most 2 decimals, like a numeric(12,2) database column',
 
 test('money: sums are exact (0.1 + 0.2 is 0.3) and the agreed price is a hard limit', async () => {
     const ctx = makeCtx();
-    await contract.CreateProject(ctx, JSON.stringify({ id: 'M-1', owner: 'o', contractor: 'c', agreedPrice: 0.3 }));
+    await contract.CreateProject(ctx, JSON.stringify({ id: 'M-1', ...PARTIES, agreedPrice: 0.3 }));
     await contract.AddPayment(ctx, 'M-1', JSON.stringify({ id: 'A', amount: 0.1, date: '2026-10-01' }));
     await contract.AddPayment(ctx, 'M-1', JSON.stringify({ id: 'B', amount: 0.2, date: '2026-10-02' }));   // exactly 0.30
     await assert.rejects(contract.AddPayment(ctx, 'M-1', JSON.stringify({ id: 'C', amount: 0.01, date: '2026-10-03' })), asCode('INVALID_INPUT'));
     await assert.rejects(contract.AddPayment(ctx, 'M-1', JSON.stringify({ id: 'D', amount: 0.001, date: '2026-10-03' })), asCode('INVALID_INPUT'));
 
     // halalas: 100.50 + 99.50 = 200 exactly
-    await contract.CreateProject(ctx, JSON.stringify({ id: 'M-2', owner: 'o', contractor: 'c', agreedPrice: 200 }));
+    await contract.CreateProject(ctx, JSON.stringify({ id: 'M-2', ...PARTIES, agreedPrice: 200 }));
     await contract.AddPayment(ctx, 'M-2', JSON.stringify({ id: 'A', amount: 100.5, date: '2026-10-01' }));
     await contract.AddPayment(ctx, 'M-2', JSON.stringify({ id: 'B', amount: 99.5, date: '2026-10-02' }));
-    await assert.rejects(contract.UpdateProject(ctx, JSON.stringify({ id: 'M-2', owner: 'o', contractor: 'c', agreedPrice: 199.99 })), asCode('INVALID_INPUT'));
-    await contract.UpdateProject(ctx, JSON.stringify({ id: 'M-2', owner: 'o', contractor: 'c', agreedPrice: 200 }));
+    await assert.rejects(contract.UpdateProject(ctx, JSON.stringify({ id: 'M-2', ...PARTIES, agreedPrice: 199.99 })), asCode('INVALID_INPUT'));
+    await contract.UpdateProject(ctx, JSON.stringify({ id: 'M-2', ...PARTIES, agreedPrice: 200 }));
 });
 
 test('task description: required, up to 5000 characters (5000)', async () => {
-    const create = (description) => contract.CreateProject(makeCtx(), JSON.stringify({ id: 'D-1', owner: 'o', contractor: 'c', agreedPrice: 1, milestone: [{ description }] }));
+    const create = (description) => contract.CreateProject(makeCtx(), JSON.stringify({ id: 'D-1', ...PARTIES, agreedPrice: 1, milestone: [{ description }] }));
     await create('x'.repeat(5000));
     await assert.rejects(create('x'.repeat(5001)), asCode('INVALID_INPUT'));
     await assert.rejects(create(''), asCode('INVALID_INPUT'));
@@ -286,9 +312,9 @@ test('task description: required, up to 5000 characters (5000)', async () => {
 
 test('task status: the five task statuses, default proposed, nothing else', async () => {
     const ctx = makeCtx();
-    const withTask = (task) => JSON.stringify({ id: 'S-1', owner: 'o', contractor: 'c', agreedPrice: 100, milestone: [task] });
+    const withTask = (task) => JSON.stringify({ id: 'S-1', ...PARTIES, agreedPrice: 100, milestone: [task] });
     const dates = { startDate: '2026-10-01', finishDate: '2026-10-05' };
-    await contract.CreateProject(ctx, JSON.stringify({ id: 'S-1', owner: 'o', contractor: 'c', agreedPrice: 100, milestone: [
+    await contract.CreateProject(ctx, JSON.stringify({ id: 'S-1', ...PARTIES, agreedPrice: 100, milestone: [
         { description: 'a' },
         { description: 'b', status: 'proposed' },
         { description: 'c', status: 'accepted' },
@@ -307,7 +333,7 @@ test('task status: the five task statuses, default proposed, nothing else', asyn
 });
 
 test('finishDate exists exactly when the status is done or approved (and needs a startDate)', async () => {
-    const create = (task) => contract.CreateProject(makeCtx(), JSON.stringify({ id: 'F-1', owner: 'o', contractor: 'c', agreedPrice: 1, milestone: [{ description: 't', ...task }] }));
+    const create = (task) => contract.CreateProject(makeCtx(), JSON.stringify({ id: 'F-1', ...PARTIES, agreedPrice: 1, milestone: [{ description: 't', ...task }] }));
     const start = { startDate: '2026-10-01' };
     await create({ ...start });                                                            // proposed, started, not finished
     await create({ ...start, status: 'accepted' });
@@ -354,6 +380,40 @@ test('records stored by earlier versions read correctly (1.1 dates only, 1.2 cli
     const after = JSON.parse(await contract.ReadProject(ctx, 'OLD-1'));
     assert.equal(after.milestone.length, 5);
     assert.equal(after.milestone[0].status, 'done');
-    // and what a client reads can be sent back with PUT unchanged
-    await contract.UpdateProject(ctx, JSON.stringify(after));
+    // the old project has no owner / contractor ids and e-mails: they read as "" (not recorded) ...
+    for (const f of ['ownerId', 'ownerEmail', 'contractorId', 'contractorEmail']) {
+        assert.equal(after[f], '', f);
+        assert.equal(history[0].value[f], '', `history ${f}`);
+    }
+    // ... so they must be filled in before the project can be updated; sending the "" back is refused
+    await assert.rejects(contract.UpdateProject(ctx, JSON.stringify(after)), asCode('INVALID_INPUT'));
+    await contract.UpdateProject(ctx, JSON.stringify({ ...after, ...PARTIES }));
+    assert.equal(JSON.parse(await contract.ReadProject(ctx, 'OLD-1')).ownerEmail, 'owner@example.com');
+});
+
+test('owner and contractor ids and e-mails are stored, read back, and can be corrected (the history keeps the old ones)', async () => {
+    const ctx = makeCtx();
+    await contract.CreateProject(ctx, JSON.stringify(PROJECT));
+    const read = JSON.parse(await contract.ReadProject(ctx, 'PRJ-001'));
+    for (const f of ['owner', 'ownerId', 'ownerEmail', 'contractor', 'contractorId', 'contractorEmail']) {
+        assert.equal(read[f], PROJECT[f], f);
+    }
+
+    await contract.UpdateProject(ctx, JSON.stringify({ ...PROJECT, ownerEmail: 'ahmed.new@example.com' }));
+    const history = JSON.parse(await contract.GetProjectHistory(ctx, 'PRJ-001'));
+    assert.deepEqual(history.map((h) => h.value.ownerEmail), ['ahmed.ali@example.com', 'ahmed.new@example.com']);
+    assert.equal(history[1].value.ownerId, PROJECT.ownerId);       // the id did not change
+
+    // payments keep the parties untouched
+    await contract.AddPayment(ctx, 'PRJ-001', JSON.stringify(PAYMENT));
+    const afterPayment = JSON.parse(await contract.ReadProject(ctx, 'PRJ-001'));
+    assert.equal(afterPayment.contractorEmail, PROJECT.contractorEmail);
+    assert.equal(afterPayment.ownerEmail, 'ahmed.new@example.com');
+});
+
+test('the same person cannot be owner and contractor, and the platform-side ids may be any safe id (uuid, USR-1 ...)', async () => {
+    const ctx = makeCtx();
+    await assert.rejects(contract.CreateProject(ctx, JSON.stringify({ ...PROJECT, contractorId: PROJECT.ownerId })), asCode('INVALID_INPUT'));
+    await contract.CreateProject(ctx, JSON.stringify({ ...PROJECT, id: 'X-1', ownerId: 'USR-1', contractorId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d' }));
+    assert.equal(JSON.parse(ctx.state.get('X-1').toString()).ownerId, 'USR-1');
 });

@@ -45,7 +45,12 @@ if (require.main === module) {
         const api = new ProjectsClient(process.argv[2] || 'http://localhost:4000');
         const id = `PRJ-DEMO-JS-${Math.floor(Date.now() / 1000)}`;
 
-        await api.createProject({ id, owner: 'Layla', contractor: 'Nour Builders', agreedPrice: 10000.5,
+        // the two parties: name, id (any id from your database) and e-mail; the owner and the contractor must be different
+        const parties = {
+            owner: 'Layla', ownerId: 'USR-1001', ownerEmail: 'layla@example.com',
+            contractor: 'Nour Builders', contractorId: 'USR-2001', contractorEmail: 'info@nour-builders.example.com',
+        };
+        await api.createProject({ id, ...parties, agreedPrice: 10000.5,
             milestone: [{ description: 'Site survey', startDate: '2026-10-05', finishDate: null, status: 'accepted' }] });
         await api.addPayment(id, { id: 'PAY-1', amount: 2500.25, date: '2026-10-06', note: 'deposit' });
         const project = await api.getProject(id);
@@ -55,7 +60,7 @@ if (require.main === module) {
         console.log(`versions on the ledger: ${history.length}`);
 
         try {
-            await api.createProject({ id, owner: 'x', contractor: 'y', agreedPrice: 1 });
+            await api.createProject({ id, ...parties, agreedPrice: 1 });
         } catch (e) {
             console.log(`duplicate id -> HTTP ${e.status} ${e.code}: ${e.message}`);
         }

@@ -8,7 +8,11 @@ One project is one record on the blockchain, stored under its `id`. Example afte
 {
   "id": "PRJ-001",
   "owner": "Ahmed Ali",
+  "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11",
+  "ownerEmail": "ahmed.ali@example.com",
   "contractor": "Al-Bina Co.",
+  "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55",
+  "contractorEmail": "info@al-bina.example.com",
   "agreedPrice": 250000,
   "currency": "SAR",
   "milestone": [
@@ -24,9 +28,13 @@ One project is one record on the blockchain, stored under its `id`. Example afte
 | Field | Meaning |
 |---|---|
 | `id` | the project's identifier; also the key on the ledger |
-| `owner` | the **client** |
-| `contractor` | the company doing the work |
-| `agreedPrice` | the price both sides agreed, whole SAR |
+| `owner` | the **client's** name |
+| `ownerId` | the client's **id** in the application's database (stable; a uuid fits) |
+| `ownerEmail` | the client's **e-mail address** |
+| `contractor` | the name of the company doing the work |
+| `contractorId` | the contractor's **id** in the application's database |
+| `contractorEmail` | the contractor's **e-mail address** |
+| `agreedPrice` | the price both sides agreed, in SAR (at most 2 decimals) |
 | `currency` | always `SAR` |
 | `milestone` | the **list of tasks** (the work plan) |
 | `payments` | money the **owner paid to the contractor** (starts empty) |
@@ -37,7 +45,15 @@ The API's answers add two **calculated** fields that are *not* stored on the cha
 
 ## Rules (enforced by the chaincode, so they hold no matter how the data is sent)
 
-**Required:** `id`, `owner`, `contractor`, `agreedPrice`, and each task's `description`. Payments need `id`, `amount`, `date`.
+**Required:** `id`, `owner`, `ownerId`, `ownerEmail`, `contractor`, `contractorId`, `contractorEmail`, `agreedPrice`, and each task's `description`. Payments need `id`, `amount`, `date`.
+
+**The two parties** (`ownerId`, `ownerEmail`, `contractorId`, `contractorEmail`; added in chaincode **1.4**):
+* an id uses letters, digits, `.`, `_`, `-` (max 64 characters; a uuid fits), like a project id;
+* an e-mail must look like `name@example.com` (something, `@`, a domain with a dot, no spaces; at most 254 characters). The chain checks the *shape*, not that the mailbox exists;
+* the **owner and the contractor must be different**: `ownerId` and `contractorId` cannot be equal;
+* the names, ids and e-mails can be corrected with an *update*; every earlier value stays visible in the history;
+* they are stored **permanently** on the ledger (see [Privacy](#privacy-what-is-stored-forever)).
+Projects created before 1.4 have none of these: they are read with empty strings (`""` = "not recorded") until they are updated with real values.
 
 **Money:** SAR with **at most 2 decimals**, like a database `numeric(12,2)` column: `250000`, `250000.5` and `99.99` are fine, `99.999` is not. `agreedPrice` and every payment `amount` must be greater than 0 and at most `9999999999.99`. All sums are exact (done in halalas, so `0.1 + 0.2` is exactly `0.3`).
 
@@ -59,7 +75,7 @@ Projects stored by earlier versions are read as: finish date set → `done`, old
 
 **Create / update:**
 * *Create* fails if the id already exists; a new project starts with **no payments** (sending payments is rejected).
-* *Update* replaces owner, contractor, agreedPrice, currency and the whole task list. It cannot change the id or the payments, and it fails if the project does not exist.
+* *Update* replaces owner and contractor (name, id, e-mail), agreedPrice, currency and the whole task list. It cannot change the id or the payments, and it fails if the project does not exist.
 * *Read*, *Update* and *Add payment* fail with "not found" if the project does not exist.
 
 ## Who may do what
@@ -89,6 +105,12 @@ The REST API calls these functions for you; you only need this table if you talk
 
 The code is **deterministic** (no clock and no random numbers inside the chaincode; history timestamps are converted from the transaction's own time), and values are saved as JSON with **sorted keys**,
 so every peer produces the identical bytes. Source: `project-network/chaincode/projectcc/`; unit tests: `cd project-network/chaincode/projectcc && npm install && npm test` (Node.js 20+).
+
+## Privacy: what is stored forever
+
+A blockchain **cannot erase** anything. The owner's and the contractor's **name, id and e-mail address** are written into every version of the project, and all earlier versions stay readable through the history, even after a correction.
+Before you send personal data, make sure that is acceptable under the rules that apply to you (for example a data-protection law with a "right to erasure") and under your privacy policy.
+If it is not, send only the **ids** (and a placeholder such as `hidden@example.com` for the e-mail), keep names and addresses in your own database, and look them up by id.
 
 ## History and "deleting"
 

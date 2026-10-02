@@ -14,7 +14,11 @@ function presentProject(p) {
     return {
         id: p.id,
         owner: p.owner,
+        ownerId: p.ownerId,
+        ownerEmail: p.ownerEmail,
         contractor: p.contractor,
+        contractorId: p.contractorId,
+        contractorEmail: p.contractorEmail,
         agreedPrice: p.agreedPrice,
         currency: p.currency,
         milestone: (p.milestone || []).map((t) => ({

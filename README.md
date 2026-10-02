@@ -1,7 +1,7 @@
 # fabric-projects-network
 
 A Hyperledger Fabric **3.1.5** network for tracking projects between an **owner** (client) and a **contractor**:
-the work plan, the agreed price and the payments. Two organizations (**Platform**, **AdminOrg**) with one peer each and one Raft orderer,
+who the two parties are (name, id and e-mail), the work plan, the agreed price and the payments. Two organizations (**Platform**, **AdminOrg**) with one peer each and one Raft orderer,
 a JavaScript chaincode (`projectcc`), a REST API (Express + `@hyperledger/fabric-gateway`), health checks and Prometheus/Grafana monitoring.
 
 Full documentation, API examples (`curl` for every endpoint) and the health test are in **[project-network/README.md](project-network/README.md)**.

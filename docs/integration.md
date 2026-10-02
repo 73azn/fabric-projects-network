@@ -8,7 +8,11 @@ The blockchain does not replace that database: it is the tamper-evident record o
 | Blockchain field | What to send |
 |---|---|
 | `id` | your project id. Letters, digits, `.` `_` `-`, up to 64 characters: a **uuid works as is** |
-| `owner`, `contractor` | the display names (up to 500 characters). They are stored permanently: if people can ask to be forgotten, send ids instead of names |
+| `owner`, `contractor` | the display names (up to 500 characters) |
+| `ownerId`, `contractorId` | the ids of the two parties **in your database** (letters, digits, `.` `_` `-`, up to 64 characters: a uuid works as is). They must be different |
+| `ownerEmail`, `contractorEmail` | their e-mail addresses (`name@example.com`, up to 254 characters) |
+
+Names, ids and e-mails are stored **permanently** (every earlier version stays in the history). If people can ask to be forgotten, read [the privacy note](data-model.md#privacy-what-is-stored-forever) first: you can send only the ids and keep names and addresses in your own database.
 | `agreedPrice` | the price both sides accepted, SAR with at most 2 decimals |
 | `currency` | always `SAR` (the only currency) |
 | `milestone[]` | the tasks: `description` (required, up to 5000), `startDate`, `finishDate`, `status` |
@@ -24,7 +28,7 @@ Dates are `YYYY-MM-DD`. If your database stores timestamps, convert them to the 
 
 | When, in your system | Call |
 |---|---|
-| the project is agreed (price and parties are final) | `POST /projects` with the id, names, price and the tasks |
+| the project is agreed (price and parties are final) | `POST /projects` with the id, the two parties (name, id, e-mail), the price and the tasks |
 | a task is added, accepted, finished, approved or rejected | `PUT /projects/{id}` with the **full** task list (it replaces the list) |
 | a payment is confirmed as paid | `POST /projects/{id}/payments` with your payment id, the amount and the paid date |
 

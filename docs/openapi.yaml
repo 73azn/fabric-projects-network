@@ -37,7 +37,11 @@ paths:
             example:
               id: PRJ-001
               owner: Ahmed Ali
+              ownerId: 5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11
+              ownerEmail: ahmed.ali@example.com
               contractor: Al-Bina Co.
+              contractorId: 9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55
+              contractorEmail: info@al-bina.example.com
               agreedPrice: 250000
               currency: SAR
               milestone:
@@ -74,7 +78,7 @@ paths:
       tags: [Projects]
       summary: Update a project
       description: |
-        Replaces owner, contractor, agreedPrice, currency and the whole milestone list (a missing `milestone` becomes empty).
+        Replaces owner and contractor (name, id and e-mail: all six are required), agreedPrice, currency and the whole milestone list (a missing `milestone` becomes empty).
         The id and the payments can never be changed here: `payments` may be sent back unchanged, anything else is rejected.
         `agreedPrice` cannot go below what is already paid. `totalPaid` and `remaining` are ignored if sent. Platform only.
       requestBody:
@@ -233,13 +237,17 @@ components:
         note: { type: string, maxLength: 500, default: '' }
     ProjectInput:
       type: object
-      required: [owner, contractor, agreedPrice]
+      required: [owner, ownerId, ownerEmail, contractor, contractorId, contractorEmail, agreedPrice]
       additionalProperties: false
       description: '`id` is required when creating; for PUT it comes from the URL (if present it must match).'
       properties:
         id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', example: PRJ-001 }
-        owner: { type: string, minLength: 1, maxLength: 500, description: 'The client', example: Ahmed Ali }
-        contractor: { type: string, minLength: 1, maxLength: 500, example: Al-Bina Co. }
+        owner: { type: string, minLength: 1, maxLength: 500, description: "The client's name", example: Ahmed Ali }
+        ownerId: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', description: "The client's id in your database (a uuid fits). Must differ from contractorId.", example: 5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11 }
+        ownerEmail: { type: string, format: email, maxLength: 254, description: "The client's e-mail (stored permanently)", example: ahmed.ali@example.com }
+        contractor: { type: string, minLength: 1, maxLength: 500, description: "The contractor's name", example: Al-Bina Co. }
+        contractorId: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', description: "The contractor's id in your database. Must differ from ownerId.", example: 9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55 }
+        contractorEmail: { type: string, format: email, maxLength: 254, description: "The contractor's e-mail (stored permanently)", example: info@al-bina.example.com }
         agreedPrice: { type: number, multipleOf: 0.01, minimum: 0.01, maximum: 9999999999.99, description: 'SAR, at most 2 decimals', example: 250000.5 }
         currency: { type: string, enum: [SAR], default: SAR }
         milestone:
@@ -255,7 +263,11 @@ components:
       properties:
         id: { type: string }
         owner: { type: string }
+        ownerId: { type: string, description: 'Empty for projects created before chaincode 1.4' }
+        ownerEmail: { type: string, description: 'Empty for projects created before chaincode 1.4' }
         contractor: { type: string }
+        contractorId: { type: string, description: 'Empty for projects created before chaincode 1.4' }
+        contractorEmail: { type: string, description: 'Empty for projects created before chaincode 1.4' }
         agreedPrice: { type: number, multipleOf: 0.01 }
         currency: { type: string, enum: [SAR] }
         milestone: { type: array, items: { $ref: '#/components/schemas/Task' } }

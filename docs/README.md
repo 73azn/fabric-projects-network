@@ -1,7 +1,7 @@
 # Documentation
 
-A blockchain system that records **projects between an owner (the client) and a contractor**: the work plan, the agreed price,
-and every payment. Once written, nothing is silently changed: each change is a new version on the ledger, and payments can never be edited or deleted.
+A blockchain system that records **projects between an owner (the client) and a contractor**: who the two parties are (name, id and e-mail),
+the work plan, the agreed price, and every payment. Once written, nothing is silently changed: each change is a new version on the ledger, and payments can never be edited or deleted.
 
 | Read this | When |
 |---|---|

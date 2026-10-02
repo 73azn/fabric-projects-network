@@ -52,7 +52,10 @@ if __name__ == "__main__":
     api = ProjectsClient(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:4000")
     pid = f"PRJ-DEMO-PY-{int(time.time())}"
 
-    api.create_project({"id": pid, "owner": "Omar", "contractor": "Rimal Co.", "agreedPrice": 20000.5,
+    # the two parties: name, id (any id from your database) and e-mail; the owner and the contractor must be different
+    parties = {"owner": "Omar", "ownerId": "USR-1001", "ownerEmail": "omar@example.com",
+               "contractor": "Rimal Co.", "contractorId": "USR-2001", "contractorEmail": "info@rimal.example.com"}
+    api.create_project({"id": pid, **parties, "agreedPrice": 20000.5,
                         "milestone": [{"description": "Excavation", "startDate": "2026-10-08", "finishDate": None, "status": "accepted"}]})
     api.add_payment(pid, {"id": "PAY-1", "amount": 5000.25, "date": "2026-10-09", "note": "deposit"})
     p = api.get_project(pid)
@@ -60,7 +63,7 @@ if __name__ == "__main__":
     print("versions on the ledger:", len(api.get_history(pid)))
 
     try:
-        api.create_project({"id": pid, "owner": "x", "contractor": "y", "agreedPrice": 1})
+        api.create_project({"id": pid, **parties, "agreedPrice": 1})
     except ApiError as e:
         print("duplicate id ->", e)
     try:

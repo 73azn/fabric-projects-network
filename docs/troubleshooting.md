@@ -37,6 +37,7 @@ curl -s http://localhost:4000/health
 | `409 ALREADY_EXISTS` | That id is taken: choose another or update the existing one. |
 | `409 CONFLICT` | Two writes to the same project at the same moment. Retry. |
 | `400 INVALID_INPUT` | The message tells you what is wrong. The rules are in [data-model.md](data-model.md). Common ones: price or amount not above 0 or with more than 2 decimals, an unknown task `status`, a `done` task without `finishDate`, a date that does not exist, a payment that would go above the agreed price, a duplicate payment id. |
+| `400` `"ownerId" is required …` (or `ownerEmail`, `contractorId`, `contractorEmail`) | Since chaincode **1.4** every project must say who the two parties are: send `ownerId`, `ownerEmail`, `contractorId` and `contractorEmail` as well (on create **and** on update). An id is letters/digits/`.`/`_`/`-` (max 64); an e-mail must look like `name@example.com`; the owner and the contractor must be different people. See [data-model.md](data-model.md#rules-enforced-by-the-chaincode-so-they-hold-no-matter-how-the-data-is-sent). |
 | JSON problems on Windows | In PowerShell `curl` is an alias for `Invoke-WebRequest`. Use `Invoke-RestMethod` (examples in [api-reference.md](api-reference.md)) or `curl.exe` and put the JSON in a here-string or a file: `curl.exe -X POST … --data "@project.json"`. |
 | `500 INTERNAL_ERROR` | Look at `./pn logs` (or `docker logs projects-api`). |
 

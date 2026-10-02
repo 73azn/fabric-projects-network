@@ -52,8 +52,12 @@ There is **no delete**: that is by design. Projects stay on the ledger, and paym
 | Field | Required | Rules |
 |---|---|---|
 | `id` | yes | letters, digits, `.` `_` `-`, up to 64 characters, e.g. `PRJ-001` |
-| `owner` | yes | the client, text up to 500 characters |
-| `contractor` | yes | text up to 500 characters |
+| `owner` | yes | the client's name, text up to 500 characters |
+| `ownerId` | yes | the client's id in your database: letters, digits, `.` `_` `-`, up to 64 characters (a uuid fits) |
+| `ownerEmail` | yes | the client's e-mail, like `name@example.com` (at most 254 characters) |
+| `contractor` | yes | the contractor's name, text up to 500 characters |
+| `contractorId` | yes | the contractor's id, same rules as `ownerId`; **must differ from `ownerId`** |
+| `contractorEmail` | yes | the contractor's e-mail |
 | `agreedPrice` | yes | SAR, greater than 0, at most 2 decimals (up to 9,999,999,999.99) |
 | `currency` | no | only `SAR` (the default) |
 | `milestone` | no | list of tasks (default: empty) |
@@ -69,13 +73,17 @@ Each task in `milestone`:
 | `status` | no | where the task stands: `proposed` (default), `accepted`, `done`, `approved`, `rejected` |
 
 The **finish date exists exactly when the status is `done` or `approved`** (so `finishDate` is `null` for `proposed`, `accepted` and `rejected`), and it needs a `startDate` and cannot be before it.
-Unknown fields are rejected.
+Unknown fields are rejected. The names, ids and e-mails are stored **permanently** (every earlier version stays in the history): see [Privacy](data-model.md#privacy-what-is-stored-forever).
 
 ```bash
 curl -s -X POST $B/projects -H "$J" -d '{
   "id": "PRJ-001",
   "owner": "Ahmed Ali",
+  "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11",
+  "ownerEmail": "ahmed.ali@example.com",
   "contractor": "Al-Bina Co.",
+  "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55",
+  "contractorEmail": "info@al-bina.example.com",
   "agreedPrice": 250000.75,
   "currency": "SAR",
   "milestone": [
@@ -89,14 +97,16 @@ PowerShell:
 
 ```powershell
 $B = 'http://localhost:4000'
-Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json' -Body '{"id":"PRJ-001","owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":250000.75,"milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"}]}'
+Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json' -Body '{"id":"PRJ-001","owner":"Ahmed Ali","ownerId":"5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11","ownerEmail":"ahmed.ali@example.com","contractor":"Al-Bina Co.","contractorId":"9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55","contractorEmail":"info@al-bina.example.com","agreedPrice":250000.75,"milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"}]}'
 ```
 
 **`201 Created`** — the project, with no payments yet:
 
 ```json
 {
-  "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
+  "id": "PRJ-001",
+  "owner": "Ahmed Ali", "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11", "ownerEmail": "ahmed.ali@example.com",
+  "contractor": "Al-Bina Co.", "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55", "contractorEmail": "info@al-bina.example.com",
   "agreedPrice": 250000.75, "currency": "SAR",
   "milestone": [
     { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
@@ -134,9 +144,10 @@ Errors: `404` no such project.
 
 `PUT /projects/{id}`
 
-Replaces `owner`, `contractor`, `agreedPrice`, `currency` and the **whole** `milestone` list. Send the complete new data, as in *Create* (without `id`, or with the same id as in the URL).
+Replaces `owner`, `ownerId`, `ownerEmail`, `contractor`, `contractorId`, `contractorEmail`, `agreedPrice`, `currency` and the **whole** `milestone` list. Send the complete new data, as in *Create* (without `id`, or with the same id as in the URL).
 
-* **A missing `milestone` becomes an empty list**, so always send the full task list you want to keep.
+* **A missing `milestone` becomes an empty list**, so always send the full task list you want to keep. The two parties' ids and e-mails are required here too (send them back unchanged, or send a corrected value: the old one stays in the history).
+* A project created before chaincode 1.4 reads with `""` for the ids and e-mails; fill in real values the first time you update it.
 * **To change a task's status** (for example the client accepts it, or it is done), update the project and send the full task list again with the new `status` (and, for `done`/`approved`, the `finishDate`). A task you send without `status` becomes `proposed`, so repeat the status of the tasks that must keep theirs.
 * The **id** and the **payments cannot be changed** here. You may send `payments` back unchanged; anything else is rejected with `400`.
 * `agreedPrice` cannot be set below what has already been paid.
@@ -145,7 +156,11 @@ Replaces `owner`, `contractor`, `agreedPrice`, `currency` and the **whole** `mil
 ```bash
 curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
   "owner": "Ahmed Ali",
+  "ownerId": "5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11",
+  "ownerEmail": "ahmed.ali@example.com",
   "contractor": "Al-Bina Co.",
+  "contractorId": "9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55",
+  "contractorEmail": "info@al-bina.example.com",
   "agreedPrice": 300000.75,
   "currency": "SAR",
   "milestone": [
@@ -157,7 +172,7 @@ curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
 ```
 
 ```powershell
-Invoke-RestMethod -Method Put -Uri "$B/projects/PRJ-001" -ContentType 'application/json' -Body '{"owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":300000.75,"milestone":[{"description":"Roof slab","startDate":null,"finishDate":null}]}'
+Invoke-RestMethod -Method Put -Uri "$B/projects/PRJ-001" -ContentType 'application/json' -Body '{"owner":"Ahmed Ali","ownerId":"5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11","ownerEmail":"ahmed.ali@example.com","contractor":"Al-Bina Co.","contractorId":"9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55","contractorEmail":"info@al-bina.example.com","agreedPrice":300000.75,"milestone":[{"description":"Roof slab","startDate":null,"finishDate":null}]}'
 ```
 
 **`200 OK`** — the updated project. Errors: `400` · `403` · `404`.

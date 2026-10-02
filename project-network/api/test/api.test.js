@@ -10,7 +10,10 @@ const { toHttpError } = require('../src/errors');
 const enc = (obj) => new TextEncoder().encode(JSON.stringify(obj));
 
 const PROJECT = {
-    id: 'PRJ-001', owner: 'Ahmed Ali', contractor: 'Al-Bina Co.', agreedPrice: 250000, currency: 'SAR', milestone: [],
+    id: 'PRJ-001',
+    owner: 'Ahmed Ali', ownerId: '5b3f0c52-1a7e-4c1d-9f0e-2d6a8b7c9e11', ownerEmail: 'ahmed.ali@example.com',
+    contractor: 'Al-Bina Co.', contractorId: '9c4d7e20-6b1f-4a3e-8d52-0f1e2a3b4c55', contractorEmail: 'info@al-bina.example.com',
+    agreedPrice: 250000, currency: 'SAR', milestone: [],
     payments: [{ id: 'PAY-1', amount: 50000, date: '2026-10-03', note: 'First payment' }],
 };
 
@@ -66,6 +69,8 @@ test('GET /projects/:id adds totalPaid and remaining (calculated, not stored)', 
         assert.equal(r.json.totalPaid, 50000);
         assert.equal(r.json.remaining, 200000);
         assert.equal(r.json.owner, 'Ahmed Ali');
+        assert.deepEqual([r.json.ownerId, r.json.ownerEmail, r.json.contractorId, r.json.contractorEmail],
+            [PROJECT.ownerId, 'ahmed.ali@example.com', PROJECT.contractorId, 'info@al-bina.example.com']);
         assert.deepEqual(calls[0], { org: 'platform', name: 'ReadProject', args: ['PRJ-001'] });
     });
 });
@@ -200,10 +205,10 @@ test('health: orderer down and unreadable height', () => {
 });
 
 test('responses use the documented field order', async () => {
-    const sorted = { agreedPrice: 10, contractor: 'c', currency: 'SAR', id: 'P', milestone: [{ description: 'd', finishDate: null, startDate: null, status: 'accepted' }], owner: 'o', payments: [{ amount: 1, date: '2026-01-01', id: 'A', note: '' }] };
+    const sorted = { agreedPrice: 10, contractor: 'c', contractorEmail: 'c@example.com', contractorId: 'C-1', currency: 'SAR', id: 'P', owner: 'o', ownerEmail: 'o@example.com', ownerId: 'O-1', milestone: [{ description: 'd', finishDate: null, startDate: null, status: 'accepted' }], payments: [{ amount: 1, date: '2026-01-01', id: 'A', note: '' }] };
     await withServer(() => enc(sorted), async (call) => {
         const r = await call('GET', '/projects/P');
-        assert.deepEqual(Object.keys(r.json), ['id', 'owner', 'contractor', 'agreedPrice', 'currency', 'milestone', 'payments', 'totalPaid', 'remaining']);
+        assert.deepEqual(Object.keys(r.json), ['id', 'owner', 'ownerId', 'ownerEmail', 'contractor', 'contractorId', 'contractorEmail', 'agreedPrice', 'currency', 'milestone', 'payments', 'totalPaid', 'remaining']);
         assert.deepEqual(Object.keys(r.json.milestone[0]), ['description', 'startDate', 'finishDate', 'status']);
         assert.equal(r.json.milestone[0].status, 'accepted');
         assert.deepEqual(Object.keys(r.json.payments[0]), ['id', 'amount', 'date', 'note']);
