@@ -10,3 +10,6 @@ config/
 
 # Node.js
 node_modules/
+
+# local settings (copy of api/.env.example)
+project-network/api/.env

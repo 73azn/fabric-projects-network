@@ -38,7 +38,8 @@ More commands: `./pn status`, `./pn logs`, `./pn monitoring`, `./pn shell`, `./p
 Everything runs in Docker: the orchestrator, the orderer, both peers, the chaincode containers, the REST API (`projects-api`), the Fabric CLI tools and Prometheus/Grafana.
 Generated files (certificates, channel artifacts) and ledgers live in Docker volumes, not in this folder. Node.js is only needed on the host to run the unit tests.
 
-Full documentation, API examples (`curl` for every endpoint), the health test and Windows notes: **[project-network/README.md](project-network/README.md)**.
+**Documentation: [docs/](docs/README.md)** — getting started, API reference (create / read / update / payments / history / health, with curl, PowerShell, JavaScript and Python examples), data model and rules, operations, architecture, troubleshooting, an OpenAPI file for Postman, and runnable demo scripts.
+Developer notes about the network itself: [project-network/README.md](project-network/README.md).
 
 ## License
 

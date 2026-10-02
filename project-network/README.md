@@ -3,6 +3,8 @@
 A Hyperledger Fabric **3.1.5** network that tracks projects between an **owner** (the client) and a **contractor**:
 the work plan, the agreed price and the payments.
 
+> **User documentation is in [`../docs`](../docs/README.md)** (getting started, API reference, data model, operations, troubleshooting). This file has the developer notes.
+
 ```
  curl / your app ──► REST API (container "projects-api": Node.js + Express + fabric-gateway, :4000)
                          │  X-Org: platform | admin   (picks whose user signs the request)

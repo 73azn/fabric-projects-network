@@ -16,7 +16,10 @@ SAMPLES_ROOT="$(dirname "$BIN_DIR")"
 IMAGE="${FABRIC_TOOLS_IMAGE:-fabric-tools-local:${FABRIC_VERSION:-3.1.5}}"
 NETWORK="${FABRIC_DOCKER_NETWORK:-projects_net}"
 
-args=(run --rm -i --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp -w "$PWD")
+# stdin is NOT attached (a tool would otherwise swallow piped input meant for the calling shell);
+# set FABRIC_TOOLS_STDIN=true to pipe data into a tool, e.g.  cat block.pb | FABRIC_TOOLS_STDIN=true configtxlator ...
+args=(run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp -w "$PWD")
+[ "${FABRIC_TOOLS_STDIN:-}" = "true" ] && args+=(-i)
 
 if [ -n "${PN_WORKSPACE_VOLUME:-}" ]; then
   args+=(-v "${PN_WORKSPACE_VOLUME}:${SAMPLES_ROOT}")

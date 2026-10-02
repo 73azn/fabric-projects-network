@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Full walk-through of the API with curl: create, read, add payments, update, history, and the error cases.
+#   docs/examples/crud-demo.sh [base-url]        (default http://localhost:4000)
+# Needs only curl (jq is used for pretty output when it is installed). It creates ONE project named PRJ-DEMO-<time>.
+set -u
+B="${1:-http://localhost:4000}"
+ID="PRJ-DEMO-$(date +%s)"
+J='Content-Type: application/json'
+
+pretty() { if command -v jq > /dev/null 2>&1; then jq .; else cat; fi; }
+
+# call <method> <path> <json-body or ""> [extra curl args]
+call() {
+  local method=$1 path=$2 body=$3; shift 3
+  local out code
+  if [ -n "$body" ]; then
+    out=$(curl -s -w '\n%{http_code}' -X "$method" "$B$path" -H "$J" -d "$body" "$@")
+  else
+    out=$(curl -s -w '\n%{http_code}' -X "$method" "$B$path" "$@")
+  fi
+  code=${out##*$'\n'}; out=${out%$'\n'*}
+  echo "-> HTTP $code"
+  echo "$out" | pretty
+}
+step() { printf '\n=== %s\n' "$1"; }
+
+step "Health"
+call GET /health ""
+
+step "CREATE  POST /projects   (expect 201)"
+call POST /projects '{"id":"'"$ID"'","owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":250000,"currency":"SAR","milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"},{"description":"Build the ground floor columns","startDate":"2026-10-21","finishDate":null}]}'
+
+step "READ  GET /projects/$ID   (expect 200, totalPaid 0)"
+call GET "/projects/$ID" ""
+
+step "ADD PAYMENT  POST /projects/$ID/payments   (expect 201)"
+call POST "/projects/$ID/payments" '{"id":"PAY-1","amount":50000,"date":"2026-10-03","note":"First payment"}'
+
+step "UPDATE  PUT /projects/$ID   (expect 200; payments stay, price and tasks replaced)"
+call PUT "/projects/$ID" '{"owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":300000,"currency":"SAR","milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"},{"description":"Build the ground floor columns","startDate":"2026-10-21","finishDate":"2026-11-15"},{"description":"Roof slab","startDate":null,"finishDate":null}]}'
+
+step "READ again   (totalPaid 50000, remaining 250000)"
+call GET "/projects/$ID" ""
+
+step "HISTORY  GET /projects/$ID/history   (3 versions, oldest first)"
+call GET "/projects/$ID/history" ""
+
+step "ERROR: create the same id again   (expect 409 ALREADY_EXISTS)"
+call POST /projects '{"id":"'"$ID"'","owner":"x","contractor":"y","agreedPrice":1}'
+
+step "ERROR: payment that would exceed the agreed price   (expect 400)"
+call POST "/projects/$ID/payments" '{"id":"PAY-2","amount":999999,"date":"2026-10-10"}'
+
+step "ERROR: the AdminOrg user tries to write   (expect 403 FORBIDDEN)"
+call POST /projects '{"id":"'"$ID"'-X","owner":"a","contractor":"b","agreedPrice":1}' -H 'X-Org: admin'
+
+step "OK: the AdminOrg user reads   (expect 200)"
+call GET "/projects/$ID" "" -H 'X-Org: admin'
+
+step "ERROR: project that does not exist   (expect 404)"
+call GET /projects/NOPE ""
+
+printf '\nDone. The demo project %s stays on the ledger (projects are never deleted).\n' "$ID"

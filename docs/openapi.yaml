@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: Projects network API
+  version: 1.0.0
+  description: |
+    Tracks projects between an **owner** (the client) and a **contractor**: the work plan (milestone tasks),
+    the agreed price and the payments. Data is stored on a Hyperledger Fabric ledger; both organizations
+    (Platform and AdminOrg) must endorse every write.
+
+    * The header `X-Org` selects whose identity signs the request: `platform` (default, can read and write)
+      or `admin` (can only read).
+    * Money is a whole number in SAR (no decimals). Dates are `YYYY-MM-DD`.
+    * **The API has no authentication.** Keep it on localhost or put an authenticating proxy in front of it.
+servers:
+  - url: http://localhost:4000
+tags:
+  - name: Projects
+  - name: Payments
+  - name: Health
+
+paths:
+  /projects:
+    post:
+      tags: [Projects]
+      summary: Create a project
+      description: The project starts with no payments. Fails with 409 if the id already exists. Platform only.
+      parameters: [{ $ref: '#/components/parameters/OrgHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+            example:
+              id: PRJ-001
+              owner: Ahmed Ali
+              contractor: Al-Bina Co.
+              agreedPrice: 250000
+              currency: SAR
+              milestone:
+                - { description: Dig and pour the foundation, startDate: '2026-10-01', finishDate: '2026-10-20' }
+                - { description: Build the ground floor columns, startDate: '2026-10-21', finishDate: null }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectWithTotals' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AlreadyExists' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /projects/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/OrgHeader' }
+    get:
+      tags: [Projects]
+      summary: Read a project
+      description: Returns the project plus `totalPaid` and `remaining`, which are calculated and not stored on the chain. Both organizations can read.
+      responses:
+        '200':
+          description: The project
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectWithTotals' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [Projects]
+      summary: Update a project
+      description: |
+        Replaces owner, contractor, agreedPrice, currency and the whole milestone list (a missing `milestone` becomes empty).
+        The id and the payments can never be changed here: `payments` may be sent back unchanged, anything else is rejected.
+        `agreedPrice` cannot go below what is already paid. `totalPaid` and `remaining` are ignored if sent. Platform only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+      responses:
+        '200':
+          description: The updated project
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectWithTotals' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /projects/{id}/payments:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/OrgHeader' }
+    post:
+      tags: [Payments]
+      summary: Add a payment
+      description: |
+        A payment is money the owner paid to the contractor. Payments can only be added: never edited or deleted.
+        The payment id must be unique in the project and the total of all payments can never exceed `agreedPrice`. Platform only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Payment' }
+            example: { id: PAY-1, amount: 50000, date: '2026-10-03', note: First payment }
+      responses:
+        '201':
+          description: The stored payment and the updated project
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment: { $ref: '#/components/schemas/Payment' }
+                  project: { $ref: '#/components/schemas/ProjectWithTotals' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /projects/{id}/history:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/OrgHeader' }
+    get:
+      tags: [Projects]
+      summary: All past versions of a project
+      description: Every version stored on the ledger, oldest first. Both organizations can read.
+      responses:
+        '200':
+          description: The versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HistoryEntry' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health of the network
+      description: |
+        Checks the orderer and both peers through their operations `/healthz`, and the block height of each peer on the channel.
+        Returns 200 when everything is fine, otherwise 503 with the reasons. A 1-block gap between the peers is tolerated for a few
+        seconds after a write.
+      responses:
+        '200':
+          description: healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: unhealthy (see `reasons`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+components:
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      description: Project id (letters, digits, `.`, `_`, `-`; max 64 characters)
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', example: PRJ-001 }
+    OrgHeader:
+      name: X-Org
+      in: header
+      required: false
+      description: Which organization's user signs the request. `admin` can only read.
+      schema: { type: string, enum: [platform, admin], default: platform }
+
+  schemas:
+    Task:
+      type: object
+      required: [description]
+      additionalProperties: false
+      properties:
+        description: { type: string, minLength: 1, maxLength: 500, description: What will be done }
+        startDate:
+          type: string
+          format: date
+          nullable: true
+          description: 'null until the task starts'
+        finishDate:
+          type: string
+          format: date
+          nullable: true
+          description: 'null until the task is finished. Needs a startDate and cannot be before it.'
+    Payment:
+      type: object
+      required: [id, amount, date]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', example: PAY-1, description: Unique inside the project }
+        amount: { type: integer, minimum: 1, description: 'Whole SAR', example: 50000 }
+        date: { type: string, format: date, example: '2026-10-03' }
+        note: { type: string, maxLength: 500, default: '' }
+    ProjectInput:
+      type: object
+      required: [owner, contractor, agreedPrice]
+      additionalProperties: false
+      description: '`id` is required when creating; for PUT it comes from the URL (if present it must match).'
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', example: PRJ-001 }
+        owner: { type: string, minLength: 1, maxLength: 500, description: 'The client', example: Ahmed Ali }
+        contractor: { type: string, minLength: 1, maxLength: 500, example: Al-Bina Co. }
+        agreedPrice: { type: integer, minimum: 1, description: 'Whole SAR', example: 250000 }
+        currency: { type: string, enum: [SAR], default: SAR }
+        milestone:
+          type: array
+          description: The tasks (work plan). Replaced as a whole on update.
+          items: { $ref: '#/components/schemas/Task' }
+        payments:
+          type: array
+          description: Not allowed on create (must be absent or empty); on update it may only be sent back unchanged.
+          items: { $ref: '#/components/schemas/Payment' }
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        owner: { type: string }
+        contractor: { type: string }
+        agreedPrice: { type: integer }
+        currency: { type: string, enum: [SAR] }
+        milestone: { type: array, items: { $ref: '#/components/schemas/Task' } }
+        payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+    ProjectWithTotals:
+      allOf:
+        - $ref: '#/components/schemas/Project'
+        - type: object
+          properties:
+            totalPaid: { type: integer, description: 'Sum of the payments (calculated, not stored on the chain)' }
+            remaining: { type: integer, description: 'agreedPrice - totalPaid (calculated)' }
+    HistoryEntry:
+      type: object
+      properties:
+        txId: { type: string }
+        timestamp: { type: string, format: date-time }
+        isDelete: { type: boolean }
+        value: { $ref: '#/components/schemas/Project' }
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [healthy, unhealthy] }
+        reasons: { type: array, items: { type: string } }
+        timestamp: { type: string, format: date-time }
+        nodes:
+          type: object
+          description: 'orderer, peer0.platform, peer0.adminorg'
+          additionalProperties:
+            type: object
+            properties:
+              status: { type: string, enum: [up, down] }
+              url: { type: string }
+              detail: { type: string }
+        channel:
+          type: object
+          properties:
+            name: { type: string }
+            peers:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  height: { type: integer, nullable: true }
+            inSync: { type: boolean }
+            heightGap: { type: integer, nullable: true }
+            lagSeconds: { type: integer }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum: [INVALID_INPUT, FORBIDDEN, NOT_FOUND, ALREADY_EXISTS, CONFLICT, NETWORK_UNAVAILABLE, INTERNAL_ERROR]
+
+  responses:
+    BadRequest:
+      description: Invalid input (`INVALID_INPUT`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: The organization is not allowed to do this (`FORBIDDEN`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: The project (or route) does not exist (`NOT_FOUND`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    AlreadyExists:
+      description: A project with this id already exists (`ALREADY_EXISTS`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: A required peer or the orderer is not reachable (`NETWORK_UNAVAILABLE`). Retry after a few seconds (header `Retry-After`).
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
