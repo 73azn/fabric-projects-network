@@ -9,7 +9,7 @@ info:
 
     * The header `X-Org` selects whose identity signs the request: `platform` (default, can read and write)
       or `admin` (can only read).
-    * Money is a whole number in SAR (no decimals). Dates are `YYYY-MM-DD`.
+    * Money is SAR with at most 2 decimals (like Watad `numeric(12,2)`). Dates are `YYYY-MM-DD`.
     * **The API has no authentication.** Keep it on localhost or put an authenticating proxy in front of it.
 servers:
   - url: http://localhost:4000
@@ -37,8 +37,8 @@ paths:
               agreedPrice: 250000
               currency: SAR
               milestone:
-                - { description: Dig and pour the foundation, startDate: '2026-10-01', finishDate: '2026-10-20', clientApproved: true }
-                - { description: Build the ground floor columns, startDate: '2026-10-21', finishDate: null, clientApproved: false }
+                - { description: Dig and pour the foundation, startDate: '2026-10-01', finishDate: '2026-10-20', status: done }
+                - { description: Build the ground floor columns, startDate: '2026-10-21', finishDate: null, status: accepted }
       responses:
         '201':
           description: Created
@@ -180,7 +180,7 @@ components:
       required: [description]
       additionalProperties: false
       properties:
-        description: { type: string, minLength: 1, maxLength: 500, description: What will be done }
+        description: { type: string, minLength: 1, maxLength: 5000, description: What will be done }
         startDate:
           type: string
           format: date
@@ -191,17 +191,19 @@ components:
           format: date
           nullable: true
           description: 'null until the task is finished. Needs a startDate and cannot be before it.'
-        clientApproved:
-          type: boolean
-          default: false
-          description: 'true if the client agreed to this task, false if not (also when omitted)'
+        status:
+          type: string
+          enum: [proposed, accepted, done, approved, rejected]
+          default: proposed
+          description: |
+            Where the task stands (same values as task_status in Watad). `finishDate` exists exactly when the status is `done` or `approved`.
     Payment:
       type: object
       required: [id, amount, date]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', example: PAY-1, description: Unique inside the project }
-        amount: { type: integer, minimum: 1, description: 'Whole SAR', example: 50000 }
+        amount: { type: number, multipleOf: 0.01, minimum: 0.01, maximum: 9999999999.99, description: 'SAR, at most 2 decimals', example: 50000.25 }
         date: { type: string, format: date, example: '2026-10-03' }
         note: { type: string, maxLength: 500, default: '' }
     ProjectInput:
@@ -213,7 +215,7 @@ components:
         id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', example: PRJ-001 }
         owner: { type: string, minLength: 1, maxLength: 500, description: 'The client', example: Ahmed Ali }
         contractor: { type: string, minLength: 1, maxLength: 500, example: Al-Bina Co. }
-        agreedPrice: { type: integer, minimum: 1, description: 'Whole SAR', example: 250000 }
+        agreedPrice: { type: number, multipleOf: 0.01, minimum: 0.01, maximum: 9999999999.99, description: 'SAR, at most 2 decimals', example: 250000.5 }
         currency: { type: string, enum: [SAR], default: SAR }
         milestone:
           type: array
@@ -229,7 +231,7 @@ components:
         id: { type: string }
         owner: { type: string }
         contractor: { type: string }
-        agreedPrice: { type: integer }
+        agreedPrice: { type: number, multipleOf: 0.01 }
         currency: { type: string, enum: [SAR] }
         milestone: { type: array, items: { $ref: '#/components/schemas/Task' } }
         payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
@@ -238,8 +240,8 @@ components:
         - $ref: '#/components/schemas/Project'
         - type: object
           properties:
-            totalPaid: { type: integer, description: 'Sum of the payments (calculated, not stored on the chain)' }
-            remaining: { type: integer, description: 'agreedPrice - totalPaid (calculated)' }
+            totalPaid: { type: number, multipleOf: 0.01, description: 'Sum of the payments (calculated, not stored on the chain)' }
+            remaining: { type: number, multipleOf: 0.01, description: 'agreedPrice - totalPaid (calculated)' }
     HistoryEntry:
       type: object
       properties:

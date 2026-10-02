@@ -14,6 +14,7 @@ const {
     totalPaid,
     normalizeProject,
 } = require('./validation');
+const { toHalalas, formatSar } = require('./money');
 
 // Only Platform may change data. Both organizations may read.
 const WRITER_MSPS = ['PlatformMSP'];
@@ -57,9 +58,9 @@ class ProjectContract extends Contract {
             throw new ChaincodeError('INVALID_INPUT', 'payments cannot be changed with UpdateProject; use AddPayment');
         }
         const paid = totalPaid(current.payments);
-        if (input.agreedPrice < paid) {
+        if (toHalalas(input.agreedPrice) < toHalalas(paid)) {
             throw new ChaincodeError('INVALID_INPUT',
-                `agreedPrice (${input.agreedPrice}) cannot be less than the total already paid (${paid})`);
+                `agreedPrice (${formatSar(input.agreedPrice)}) cannot be less than the total already paid (${formatSar(paid)})`);
         }
 
         const project = { ...input, payments: current.payments };
@@ -82,10 +83,11 @@ class ProjectContract extends Contract {
             throw new ChaincodeError('INVALID_INPUT', `payment id ${payment.id} already exists in project ${id}`);
         }
         const paid = totalPaid(project.payments);
-        if (paid + payment.amount > project.agreedPrice) {
+        const newTotalHalalas = toHalalas(paid) + toHalalas(payment.amount);
+        if (newTotalHalalas > toHalalas(project.agreedPrice)) {
             throw new ChaincodeError('INVALID_INPUT',
-                `payment of ${payment.amount} would make the total paid (${paid + payment.amount}) ` +
-                `exceed the agreed price (${project.agreedPrice})`);
+                `payment of ${formatSar(payment.amount)} would make the total paid (${formatSar(newTotalHalalas / 100)}) ` +
+                `exceed the agreed price (${formatSar(project.agreedPrice)})`);
         }
 
         project.payments.push(payment);

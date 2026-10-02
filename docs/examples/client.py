@@ -48,11 +48,11 @@ if __name__ == "__main__":
     api = ProjectsClient(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:4000")
     pid = f"PRJ-DEMO-PY-{int(time.time())}"
 
-    api.create_project({"id": pid, "owner": "Omar", "contractor": "Rimal Co.", "agreedPrice": 20000,
-                        "milestone": [{"description": "Excavation", "startDate": "2026-10-08", "finishDate": None, "clientApproved": True}]})
-    api.add_payment(pid, {"id": "PAY-1", "amount": 5000, "date": "2026-10-09", "note": "deposit"})
+    api.create_project({"id": pid, "owner": "Omar", "contractor": "Rimal Co.", "agreedPrice": 20000.5,
+                        "milestone": [{"description": "Excavation", "startDate": "2026-10-08", "finishDate": None, "status": "accepted"}]})
+    api.add_payment(pid, {"id": "PAY-1", "amount": 5000.25, "date": "2026-10-09", "note": "deposit"})
     p = api.get_project(pid)
-    print(f"{p['id']}: paid {p['totalPaid']} of {p['agreedPrice']}, remaining {p['remaining']}, client agreed to: {[t['clientApproved'] for t in p['milestone']]}")
+    print(f"{p['id']}: paid {p['totalPaid']} of {p['agreedPrice']}, remaining {p['remaining']}, task statuses: {[t['status'] for t in p['milestone']]}")
     print("versions on the ledger:", len(api.get_history(pid)))
 
     try:

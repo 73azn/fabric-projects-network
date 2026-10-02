@@ -3,6 +3,7 @@
 const express = require('express');
 const { FabricConnections, decodeJson } = require('./fabric');
 const { HttpError } = require('./errors');
+const { toHalalas, fromHalalas } = require('./money');
 
 function isPlainObject(v) {
     return v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -20,7 +21,7 @@ function presentProject(p) {
             description: t.description,
             startDate: t.startDate,
             finishDate: t.finishDate,
-            clientApproved: t.clientApproved === true, // missing on projects stored before the field existed
+            status: t.status || 'proposed', // proposed | accepted | done | approved | rejected (see the data model docs)
         })),
         payments: (p.payments || []).map((x) => ({ id: x.id, amount: x.amount, date: x.date, note: x.note })),
     };
@@ -29,8 +30,8 @@ function presentProject(p) {
 /** totalPaid / remaining are calculated for the response only; they are never stored on the chain. */
 function withTotals(project) {
     const shaped = presentProject(project);
-    const totalPaid = shaped.payments.reduce((sum, p) => sum + p.amount, 0);
-    return { ...shaped, totalPaid, remaining: shaped.agreedPrice - totalPaid };
+    const paidHalalas = shaped.payments.reduce((sum, p) => sum + toHalalas(p.amount), 0);
+    return { ...shaped, totalPaid: fromHalalas(paidHalalas), remaining: fromHalalas(toHalalas(shaped.agreedPrice) - paidHalalas) };
 }
 
 function presentHistory(history) {

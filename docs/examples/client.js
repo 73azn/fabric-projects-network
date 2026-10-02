@@ -40,11 +40,11 @@ if (require.main === module) {
         const api = new ProjectsClient(process.argv[2] || 'http://localhost:4000');
         const id = `PRJ-DEMO-JS-${Math.floor(Date.now() / 1000)}`;
 
-        await api.createProject({ id, owner: 'Layla', contractor: 'Nour Builders', agreedPrice: 10000,
-            milestone: [{ description: 'Site survey', startDate: '2026-10-05', finishDate: null, clientApproved: true }] });
-        await api.addPayment(id, { id: 'PAY-1', amount: 2500, date: '2026-10-06', note: 'deposit' });
+        await api.createProject({ id, owner: 'Layla', contractor: 'Nour Builders', agreedPrice: 10000.5,
+            milestone: [{ description: 'Site survey', startDate: '2026-10-05', finishDate: null, status: 'accepted' }] });
+        await api.addPayment(id, { id: 'PAY-1', amount: 2500.25, date: '2026-10-06', note: 'deposit' });
         const project = await api.getProject(id);
-        console.log(`${project.id}: paid ${project.totalPaid} of ${project.agreedPrice}, remaining ${project.remaining}, client agreed to: ${project.milestone.map((t) => t.clientApproved)}`);
+        console.log(`${project.id}: paid ${project.totalPaid} of ${project.agreedPrice}, remaining ${project.remaining}, task statuses: ${project.milestone.map((t) => t.status)}`);
 
         const history = await api.getHistory(id);
         console.log(`versions on the ledger: ${history.length}`);

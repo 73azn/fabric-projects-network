@@ -17,7 +17,7 @@ There is **no delete**: that is by design. Projects stay on the ledger, and paym
 
 * **Who is calling** — header `X-Org: platform` (default) or `X-Org: admin`. `platform` can read and write; `admin` (the AdminOrg user) can only read: a write returns `403`.
   There is **no password or token**: see [security](operations.md#security).
-* **Money** — whole numbers in SAR (no decimals). **Dates** — `YYYY-MM-DD`.
+* **Money** — SAR with **at most 2 decimals** (like Supabase `numeric(12,2)`), for example `250000`, `250000.5`, `99.99`; at most `9999999999.99`. Totals are exact. **Dates** — `YYYY-MM-DD`.
 * **Content type** — send `Content-Type: application/json` with a body.
 * **Writes take about a second or two**: both organizations must approve and the block has to be committed before the answer comes back.
 * The examples below use `curl` (macOS, Linux, WSL, Git Bash). Set these once:
@@ -40,7 +40,7 @@ There is **no delete**: that is by design. Projects stay on the ledger, and paym
 | `id` | yes | letters, digits, `.` `_` `-`, up to 64 characters, e.g. `PRJ-001` |
 | `owner` | yes | the client, text up to 500 characters |
 | `contractor` | yes | text up to 500 characters |
-| `agreedPrice` | yes | whole number, greater than 0 |
+| `agreedPrice` | yes | SAR, greater than 0, at most 2 decimals (up to 9,999,999,999.99) |
 | `currency` | no | only `SAR` (the default) |
 | `milestone` | no | list of tasks (default: empty) |
 | `payments` | no | must be absent or `[]`: payments are added only with *Add a payment* |
@@ -49,11 +49,12 @@ Each task in `milestone`:
 
 | Field | Required | Rules |
 |---|---|---|
-| `description` | yes | what will be done |
+| `description` | yes | what will be done, 1 to **5000** characters |
 | `startDate` | no | `YYYY-MM-DD`, or `null` until the task starts |
 | `finishDate` | no | `YYYY-MM-DD`, or `null` until it is finished. Needs a `startDate`, and cannot be before it |
-| `clientApproved` | no | `true` if the **client agreed to this task**, `false` if not. Default `false`. Only `true`/`false` are accepted (not `"true"`, `1` or `null`) |
+| `status` | no | where the task stands, the same values as in Watad: `proposed` (default), `accepted`, `done`, `approved`, `rejected` |
 
+The **finish date exists exactly when the status is `done` or `approved`** (so `finishDate` is `null` for `proposed`, `accepted` and `rejected`), and it needs a `startDate` and cannot be before it.
 Unknown fields are rejected.
 
 ```bash
@@ -64,8 +65,8 @@ curl -s -X POST $B/projects -H "$J" -d '{
   "agreedPrice": 250000,
   "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "status": "proposed" }
   ]
 }'
 ```
@@ -84,8 +85,8 @@ Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json
   "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
   "agreedPrice": 250000, "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "status": "proposed" }
   ],
   "payments": [],
   "totalPaid": 0,
@@ -122,7 +123,7 @@ Errors: `404` no such project.
 Replaces `owner`, `contractor`, `agreedPrice`, `currency` and the **whole** `milestone` list. Send the complete new data, as in *Create* (without `id`, or with the same id as in the URL).
 
 * **A missing `milestone` becomes an empty list**, so always send the full task list you want to keep.
-* **To record that the client agreed to a task** (or withdrew), update the project and send the task list again with that task's `clientApproved` set to `true` (or `false`). A task you send without `clientApproved` becomes `false`, so repeat it for the tasks that are already agreed.
+* **To change a task's status** (for example the client accepts it, or it is done), update the project and send the full task list again with the new `status` (and, for `done`/`approved`, the `finishDate`). A task you send without `status` becomes `proposed`, so repeat the status of the tasks that must keep theirs.
 * The **id** and the **payments cannot be changed** here. You may send `payments` back unchanged; anything else is rejected with `400`.
 * `agreedPrice` cannot be set below what has already been paid.
 * `totalPaid` and `remaining` are ignored if you send them back (handy when you edit a project you just read).
@@ -134,9 +135,9 @@ curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
   "agreedPrice": 300000,
   "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": "2026-11-15", "clientApproved": true },
-    { "description": "Roof slab", "startDate": null, "finishDate": null, "clientApproved": false }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": "2026-11-15", "status": "done" },
+    { "description": "Roof slab", "startDate": null, "finishDate": null, "status": "proposed" }
   ]
 }'
 ```
@@ -158,7 +159,7 @@ A payment is money the owner paid to the contractor.
 | Field | Required | Rules |
 |---|---|---|
 | `id` | yes | unique inside the project, e.g. `PAY-1` |
-| `amount` | yes | whole number, greater than 0 |
+| `amount` | yes | SAR, greater than 0, at most 2 decimals (e.g. `100.10`) |
 | `date` | yes | `YYYY-MM-DD` |
 | `note` | no | text |
 
@@ -267,7 +268,7 @@ Every error has the same shape: `{ "error": "<what is wrong>", "code": "<CODE>" 
 
 Typical `400` messages: `"agreedPrice" must be greater than 0` · `finishDate (…) cannot be before startDate (…)` · `a task cannot have a finishDate without a startDate` ·
 `payment id PAY-1 already exists in project PRJ-001` · `payments cannot be changed with UpdateProject; use AddPayment` ·
-`agreedPrice (100) cannot be less than the total already paid (50000)` · `"clientApproved" must be true or false` · `"date" … must be a real date in YYYY-MM-DD format` (for example `2026-02-30` is rejected).
+`agreedPrice (100) cannot be less than the total already paid (50000)` · `"status" must be one of proposed, accepted, done, approved, rejected` · `status "done" needs a finishDate` · `finishDate can only be set when the status is done or approved` · `"amount" must have at most 2 decimals` · `"date" … must be a real date in YYYY-MM-DD format` (for example `2026-02-30` is rejected).
 
 > **After restarting a peer**, a *write* can return `503` for up to about half a minute until the peers see each other again. Just retry.
 

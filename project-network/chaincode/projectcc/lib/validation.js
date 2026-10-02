@@ -3,6 +3,8 @@
  */
 'use strict';
 
+const { MAX_AMOUNT, hasAtMostTwoDecimals, toHalalas, sumAmounts, formatSar } = require('./money');
+
 /**
  * Pure validation helpers. No Date, no randomness, no I/O: safe to run inside chaincode.
  * Every failure throws a ChaincodeError whose message starts with a machine readable code
@@ -23,9 +25,14 @@ const CURRENCY = 'SAR';
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MAX_TEXT = 500;
+const MAX_DESCRIPTION = 5000; // typical database text limit
+
+// Task lifecycle of a marketplace-style app: proposed -> accepted -> done -> approved (or rejected)
+const TASK_STATUSES = ['proposed', 'accepted', 'done', 'approved', 'rejected'];
+const FINISHED_STATUSES = ['done', 'approved'];
 
 const PROJECT_FIELDS = ['id', 'owner', 'contractor', 'agreedPrice', 'currency', 'milestone', 'payments'];
-const TASK_FIELDS = ['description', 'startDate', 'finishDate', 'clientApproved'];
+const TASK_FIELDS = ['description', 'startDate', 'finishDate', 'status'];
 const PAYMENT_FIELDS = ['id', 'amount', 'date', 'note'];
 
 function isPlainObject(value) {
@@ -66,12 +73,12 @@ function isValidDate(value) {
     return y >= 1 && m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);
 }
 
-function requireText(value, name, what) {
+function requireText(value, name, what, max = MAX_TEXT) {
     if (typeof value !== 'string' || value.trim().length === 0) {
         throw invalid(`${what}: "${name}" is required and must be a non-empty string`);
     }
-    if (value.length > MAX_TEXT) {
-        throw invalid(`${what}: "${name}" is too long (max ${MAX_TEXT} characters)`);
+    if (value.length > max) {
+        throw invalid(`${what}: "${name}" is too long (max ${max} characters)`);
     }
     return value;
 }
@@ -83,12 +90,19 @@ function requireId(value, what) {
     return value;
 }
 
+/** SAR with at most 2 decimals, greater than 0, at most 9,999,999,999.99 (like a numeric(12,2) database column). */
 function requireMoney(value, name, what) {
-    if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
-        throw invalid(`${what}: "${name}" is required and must be a whole number (SAR, no decimals)`);
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw invalid(`${what}: "${name}" is required and must be a number in SAR (at most 2 decimals)`);
     }
     if (value <= 0) {
         throw invalid(`${what}: "${name}" must be greater than 0`);
+    }
+    if (value > MAX_AMOUNT) {
+        throw invalid(`${what}: "${name}" is too large (max ${formatSar(MAX_AMOUNT)} SAR)`);
+    }
+    if (!hasAtMostTwoDecimals(value)) {
+        throw invalid(`${what}: "${name}" must have at most 2 decimals`);
     }
     return value;
 }
@@ -103,13 +117,13 @@ function optionalDate(value, name, what) {
     return value;
 }
 
-/** The client's agreement to a task: true or false. Missing means false (not agreed yet). */
-function optionalBoolean(value, name, what) {
+/** Task status. Missing means "proposed". */
+function optionalStatus(value, name, what) {
     if (value === undefined) {
-        return false;
+        return 'proposed';
     }
-    if (typeof value !== 'boolean') {
-        throw invalid(`${what}: "${name}" must be true or false`);
+    if (!TASK_STATUSES.includes(value)) {
+        throw invalid(`${what}: "${name}" must be one of ${TASK_STATUSES.join(', ')}`);
     }
     return value;
 }
@@ -120,7 +134,7 @@ function validateTask(task, index) {
         throw invalid(`${what} must be an object`);
     }
     rejectUnknownFields(task, TASK_FIELDS, what);
-    const description = requireText(task.description, 'description', what);
+    const description = requireText(task.description, 'description', what, MAX_DESCRIPTION);
     const startDate = optionalDate(task.startDate, 'startDate', what);
     const finishDate = optionalDate(task.finishDate, 'finishDate', what);
     if (finishDate !== null && startDate === null) {
@@ -130,23 +144,38 @@ function validateTask(task, index) {
     if (finishDate !== null && finishDate < startDate) {
         throw invalid(`${what}: finishDate (${finishDate}) cannot be before startDate (${startDate})`);
     }
-    const clientApproved = optionalBoolean(task.clientApproved, 'clientApproved', what);
-    return { description, startDate, finishDate, clientApproved };
+    const status = optionalStatus(task.status, 'status', what);
+    // a finish date exists exactly when the task is done or approved
+    if (FINISHED_STATUSES.includes(status) && finishDate === null) {
+        throw invalid(`${what}: status "${status}" needs a finishDate`);
+    }
+    if (!FINISHED_STATUSES.includes(status) && finishDate !== null) {
+        throw invalid(`${what}: finishDate can only be set when the status is ${FINISHED_STATUSES.join(' or ')}`);
+    }
+    return { description, startDate, finishDate, status };
 }
 
 /**
- * Projects stored before the field "clientApproved" existed have tasks without it: they read as false.
+ * Tasks stored by earlier chaincode versions have no "status" (1.1 had only dates; 1.2 had a true/false
+ * "clientApproved"). They read as: finishDate set -> done, clientApproved true -> accepted, otherwise proposed.
  * Pure function, used when reading, so every peer returns the same bytes.
  */
-function normalizeProject(project) {
-    return {
-        ...project,
-        milestone: (project.milestone || []).map((task) => ({ ...task, clientApproved: task.clientApproved === true })),
-    };
+function normalizeTask(task) {
+    const { clientApproved, ...rest } = task;
+    let { status } = rest;
+    if (!TASK_STATUSES.includes(status)) {
+        status = rest.finishDate ? 'done' : (clientApproved === true ? 'accepted' : 'proposed');
+    }
+    return { ...rest, status };
 }
 
+function normalizeProject(project) {
+    return { ...project, milestone: (project.milestone || []).map(normalizeTask) };
+}
+
+/** Total of the payments in SAR (exact: summed in halalas). */
 function totalPaid(payments) {
-    return payments.reduce((sum, p) => sum + p.amount, 0);
+    return sumAmounts(payments);
 }
 
 /**
@@ -223,4 +252,5 @@ module.exports = {
     requireId,
     totalPaid,
     normalizeProject,
+    TASK_STATUSES,
 };

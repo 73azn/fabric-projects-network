@@ -181,29 +181,41 @@ test('health: orderer down and unreadable height', () => {
 });
 
 test('responses use the documented field order', async () => {
-    const sorted = { agreedPrice: 10, contractor: 'c', currency: 'SAR', id: 'P', milestone: [{ clientApproved: true, description: 'd', finishDate: null, startDate: null }], owner: 'o', payments: [{ amount: 1, date: '2026-01-01', id: 'A', note: '' }] };
+    const sorted = { agreedPrice: 10, contractor: 'c', currency: 'SAR', id: 'P', milestone: [{ description: 'd', finishDate: null, startDate: null, status: 'accepted' }], owner: 'o', payments: [{ amount: 1, date: '2026-01-01', id: 'A', note: '' }] };
     await withServer(() => enc(sorted), async (call) => {
         const r = await call('GET', '/projects/P');
         assert.deepEqual(Object.keys(r.json), ['id', 'owner', 'contractor', 'agreedPrice', 'currency', 'milestone', 'payments', 'totalPaid', 'remaining']);
-        assert.deepEqual(Object.keys(r.json.milestone[0]), ['description', 'startDate', 'finishDate', 'clientApproved']);
-        assert.equal(r.json.milestone[0].clientApproved, true);
+        assert.deepEqual(Object.keys(r.json.milestone[0]), ['description', 'startDate', 'finishDate', 'status']);
+        assert.equal(r.json.milestone[0].status, 'accepted');
         assert.deepEqual(Object.keys(r.json.payments[0]), ['id', 'amount', 'date', 'note']);
     });
 });
 
-test('tasks without clientApproved (stored by an older version) are shown as false, in reads and in the history', async () => {
+test('a task without status is shown as proposed (chaincode normally fills it in)', async () => {
     const old = { ...PROJECT, milestone: [{ description: 'legacy', startDate: '2026-10-01', finishDate: null }] };
-    await withServer((_o, name) => (name === 'GetProjectHistory' ? enc([{ txId: 'a', timestamp: 't', isDelete: false, value: old }]) : enc(old)), async (call) => {
+    await withServer(() => enc(old), async (call) => {
         const r = await call('GET', '/projects/PRJ-001');
-        assert.equal(r.json.milestone[0].clientApproved, false);
-        const h = await call('GET', '/projects/PRJ-001/history');
-        assert.equal(h.json[0].value.milestone[0].clientApproved, false);
+        assert.equal(r.json.milestone[0].status, 'proposed');
     });
 });
 
-test('clientApproved in the request body is passed to the chaincode untouched', async () => {
+test('status and decimal amounts in the request body are passed to the chaincode untouched', async () => {
     await withServer(() => enc(PROJECT), async (call, calls) => {
-        await call('POST', '/projects', { body: { id: 'P', owner: 'o', contractor: 'c', agreedPrice: 1, milestone: [{ description: 't', clientApproved: true }] } });
-        assert.equal(JSON.parse(calls[0].args[0]).milestone[0].clientApproved, true);
+        await call('POST', '/projects', { body: { id: 'P', owner: 'o', contractor: 'c', agreedPrice: 100.5, milestone: [{ description: 't', status: 'accepted' }] } });
+        const sent = JSON.parse(calls[0].args[0]);
+        assert.equal(sent.milestone[0].status, 'accepted');
+        assert.equal(sent.agreedPrice, 100.5);
+    });
+});
+
+test('totalPaid and remaining are exact with decimals (0.1 + 0.2 = 0.3)', async () => {
+    const decimals = { ...PROJECT, agreedPrice: 100.5, payments: [
+        { id: 'A', amount: 0.1, date: '2026-10-01', note: '' },
+        { id: 'B', amount: 0.2, date: '2026-10-02', note: '' },
+    ] };
+    await withServer(() => enc(decimals), async (call) => {
+        const r = await call('GET', '/projects/PRJ-001');
+        assert.equal(r.json.totalPaid, 0.3);
+        assert.equal(r.json.remaining, 100.2);
     });
 });

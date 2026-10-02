@@ -35,7 +35,7 @@ curl -s http://localhost:4000/health
 | `404 NOT_FOUND` | The project id does not exist (ids are case-sensitive). |
 | `409 ALREADY_EXISTS` | That id is taken: choose another or update the existing one. |
 | `409 CONFLICT` | Two writes to the same project at the same moment. Retry. |
-| `400 INVALID_INPUT` | The message tells you what is wrong. The rules are in [data-model.md](data-model.md). Common ones: price or amount not a whole number above 0, a date that does not exist, a payment that would go above the agreed price, a duplicate payment id. |
+| `400 INVALID_INPUT` | The message tells you what is wrong. The rules are in [data-model.md](data-model.md). Common ones: price or amount not above 0 or with more than 2 decimals, an unknown task `status`, a `done` task without `finishDate`, a date that does not exist, a payment that would go above the agreed price, a duplicate payment id. |
 | JSON problems on Windows | In PowerShell `curl` is an alias for `Invoke-WebRequest`. Use `Invoke-RestMethod` (examples in [api-reference.md](api-reference.md)) or `curl.exe` and put the JSON in a here-string or a file: `curl.exe -X POST … --data "@project.json"`. |
 | `500 INTERNAL_ERROR` | Look at `./pn logs` (or `docker logs projects-api`). |
 

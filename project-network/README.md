@@ -86,8 +86,8 @@ One asset per project, stored under its `id` (example after one payment):
   "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
   "agreedPrice": 250000, "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",     "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
-    { "description": "Build the ground floor columns",  "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
+    { "description": "Dig and pour the foundation",     "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
+    { "description": "Build the ground floor columns",  "startDate": "2026-10-21", "finishDate": null,         "status": "proposed" }
   ],
   "payments": [ { "id": "PAY-1", "amount": 50000, "date": "2026-10-03", "note": "First payment" } ]
 }
@@ -103,7 +103,7 @@ One asset per project, stored under its `id` (example after one payment):
 | `GetProjectHistory(id)` | both | Every version on the ledger, oldest first: `[{txId, timestamp, isDelete, value}]`. |
 
 Validation (all errors start with a code: `INVALID_INPUT`, `NOT_FOUND`, `ALREADY_EXISTS`, `FORBIDDEN`):
-required `id`, `owner`, `contractor`, `agreedPrice`, task `description`; `id` = letters/digits/`.`/`_`/`-` (max 64); money = whole numbers in SAR (no decimals), `agreedPrice > 0`, payment `amount > 0`;
+required `id`, `owner`, `contractor`, `agreedPrice`, task `description`; `id` = letters/digits/`.`/`_`/`-` (max 64); money = SAR with at most 2 decimals (like a database `numeric(12,2)` column), `agreedPrice > 0`, payment `amount > 0`; task `status` = proposed / accepted / done / approved / rejected, `finishDate` only for done / approved; task `description` up to 5000 characters;
 dates must be real `YYYY-MM-DD` dates (`null` allowed for task dates; a task can't have `finishDate` without `startDate`, nor finish before start); payment ids unique per project;
 **total payments can never exceed `agreedPrice`** (also when `agreedPrice` is updated); unknown fields are rejected.
 The caller's MSP ID decides who may write. The code is deterministic: no `Date`, `Date.now()` or random values (timestamps in the history are converted by hand from the transaction time); values are saved as JSON with sorted keys.
