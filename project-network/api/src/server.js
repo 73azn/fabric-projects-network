@@ -7,10 +7,13 @@ const { createApp } = require('./app');
 
 const config = loadConfig();
 const fabric = new FabricConnections(config);
-const app = createApp({ fabric, health: createHealthChecker({ config, fabric }) });
+const app = createApp({ fabric, health: createHealthChecker({ config, fabric }), apiKey: config.apiKey });
 
 const server = app.listen(config.port, config.host, () => {
     console.log(`projects-api listening on http://${config.host}:${config.port} (channel ${config.channelName}, chaincode ${config.chaincodeName})`);
+    console.log(config.apiKey
+        ? 'API key required on every request (Authorization: Bearer <key>)'
+        : 'WARNING: no API_KEY set, anyone who can reach this port can use the API (keep it on localhost)');
 });
 
 function shutdown() {

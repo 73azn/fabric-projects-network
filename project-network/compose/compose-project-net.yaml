@@ -29,6 +29,7 @@ services:
 
   orderer.example.com:
     container_name: orderer.example.com
+    restart: unless-stopped
     image: hyperledger/fabric-orderer:${FABRIC_IMAGE_TAG:-3.1.5}
     labels:
       service: hyperledger-fabric
@@ -81,6 +82,7 @@ services:
 
   peer0.platform.example.com:
     container_name: peer0.platform.example.com
+    restart: unless-stopped
     image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG:-3.1.5}
     labels:
       service: hyperledger-fabric
@@ -124,6 +126,7 @@ services:
 
   peer0.adminorg.example.com:
     container_name: peer0.adminorg.example.com
+    restart: unless-stopped
     image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG:-3.1.5}
     labels:
       service: hyperledger-fabric

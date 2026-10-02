@@ -19,14 +19,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 START_API=true
 START_MONITORING=false
-for arg in "$@"; do
-  case "$arg" in
+DOMAIN="${PN_DOMAIN:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-api) START_API=false ;;
     --monitoring) START_MONITORING=true ;;
     --download-fabric) export PN_DOWNLOAD_FABRIC=true ;;
-    -h|--help) sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) fatalln "Unknown option: $arg (see ./pn start --help)" ;;
+    --domain) DOMAIN="${2:-}"; [ -n "$DOMAIN" ] || fatalln "--domain needs a name, for example --domain chain.example.com"; shift ;;
+    -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) fatalln "Unknown option: $1 (see ./pn start --help)" ;;
   esac
+  shift
 done
 
 ./network.sh up            || fatalln "Starting the network failed"
@@ -35,6 +38,10 @@ done
 
 if [ "$START_API" = "true" ]; then
   ./network.sh api || fatalln "Starting the REST API container failed"
+fi
+if [ -n "$DOMAIN" ]; then
+  [ "$START_API" = "true" ] || fatalln "--domain needs the API (do not combine it with --no-api)"
+  PN_DOMAIN="$DOMAIN" ./network.sh proxy || fatalln "Starting the HTTPS proxy failed"
 fi
 if [ "$START_MONITORING" = "true" ]; then
   ./start-monitoring.sh || fatalln "Starting Prometheus/Grafana failed"

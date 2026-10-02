@@ -15,7 +15,7 @@ const PROJECT = {
 };
 
 /** Starts the app on a random port with a fake gateway; `handler(org, fn, args)` plays the chaincode. */
-async function withServer(handler, fn) {
+async function withServer(handler, fn, { apiKey } = {}) {
     const calls = [];
     const fabric = {
         contract: (org) => ({
@@ -24,17 +24,36 @@ async function withServer(handler, fn) {
         }),
     };
     const health = async () => ({ httpStatus: 200, body: { status: 'healthy' } });
-    const server = http.createServer(createApp({ fabric, health }));
+    const server = http.createServer(createApp({ fabric, health, apiKey }));
     await new Promise((r) => server.listen(0, r));
     const base = `http://127.0.0.1:${server.address().port}`;
-    const call = async (method, path, { body, headers = {}, raw } = {}) => {
-        const res = await fetch(base + path, {
+    // plain node:http, one connection per request: no connection pool shared between the short-lived test servers
+    const call = (method, path, { body, headers = {}, raw } = {}) => new Promise((resolve, reject) => {
+        const payload = raw !== undefined ? raw : body !== undefined ? JSON.stringify(body) : undefined;
+        const req = http.request(base + path, {
             method,
-            headers: { ...(body !== undefined || raw !== undefined ? { 'content-type': 'application/json' } : {}), ...headers },
-            body: raw !== undefined ? raw : body !== undefined ? JSON.stringify(body) : undefined,
+            agent: false,
+            headers: {
+                connection: 'close',
+                ...(payload !== undefined ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
+                ...headers,
+            },
+        }, (res) => {
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', () => {
+                const text = Buffer.concat(chunks).toString('utf8');
+                try {
+                    resolve({ status: res.statusCode, json: text ? JSON.parse(text) : undefined, headers: res.headers });
+                } catch (err) {
+                    reject(new Error(`${method} ${path}: HTTP ${res.statusCode}, body is not JSON: ${text.slice(0, 80)}`));
+                }
+            });
         });
-        return { status: res.status, json: await res.json() };
-    };
+        req.on('error', reject);
+        if (payload !== undefined) req.write(payload);
+        req.end();
+    });
     try { await fn(call, calls); } finally { await new Promise((r) => server.close(r)); }
 }
 
@@ -218,4 +237,66 @@ test('totalPaid and remaining are exact with decimals (0.1 + 0.2 = 0.3)', async 
         assert.equal(r.json.totalPaid, 0.3);
         assert.equal(r.json.remaining, 100.2);
     });
+});
+
+// ---------------------------------------------------------------- API key
+
+const KEY = 'k'.repeat(24) + 'secret-test-key';
+
+test('with an API key: no key, a wrong key or another scheme -> 401 with WWW-Authenticate; only the right key passes', async () => {
+    await withServer(() => enc(PROJECT), async (call) => {
+        const none = await call('GET', '/projects/PRJ-001');
+        assert.equal(none.status, 401);
+        assert.equal(none.json.code, 'UNAUTHORIZED');
+        for (const headers of [
+            { Authorization: 'Bearer wrong-key-wrong-key-wrong-key' },
+            { Authorization: `Basic ${KEY}` },
+            { Authorization: KEY },
+            { Authorization: 'Bearer ' },
+            { 'X-API-Key': KEY },
+        ]) {
+            const r = await call('GET', '/projects/PRJ-001', { headers });
+            assert.equal(r.status, 401, JSON.stringify(headers));
+        }
+        const ok = await call('GET', '/projects/PRJ-001', { headers: { Authorization: `Bearer ${KEY}` } });
+        assert.equal(ok.status, 200);
+        assert.equal((await call('GET', '/projects/PRJ-001', { headers: { authorization: `bearer ${KEY}` } })).status, 200); // scheme and header name are case-insensitive
+    }, { apiKey: KEY });
+});
+
+test('with an API key every route is protected except GET /livez', async () => {
+    await withServer(() => enc(PROJECT), async (call) => {
+        assert.equal((await call('GET', '/livez')).status, 200);
+        assert.deepEqual((await call('GET', '/livez')).json, { status: 'ok' });
+        for (const [method, path, body] of [
+            ['GET', '/'], ['GET', '/health'], ['GET', '/projects/PRJ-001'], ['GET', '/projects/PRJ-001/history'],
+            ['POST', '/projects', { id: 'X' }], ['PUT', '/projects/PRJ-001', {}], ['POST', '/projects/PRJ-001/payments', {}],
+            ['GET', '/nothing-here'],
+        ]) {
+            const r = await call(method, path, { body });
+            assert.equal(r.status, 401, `${method} ${path}`);
+        }
+    }, { apiKey: KEY });
+});
+
+test('a rejected request never reaches the network', async () => {
+    await withServer(() => enc(PROJECT), async (call, calls) => {
+        await call('POST', '/projects', { body: { id: 'X', owner: 'a', contractor: 'b', agreedPrice: 1 } });
+        await call('GET', '/projects/PRJ-001', { headers: { Authorization: 'Bearer nope-nope-nope-nope-nope-nope' } });
+        assert.equal(calls.length, 0);
+    }, { apiKey: KEY });
+});
+
+test('without an API key the API stays open (localhost use); /livez is always public', async () => {
+    await withServer(() => enc(PROJECT), async (call) => {
+        assert.equal((await call('GET', '/projects/PRJ-001')).status, 200);
+        assert.equal((await call('GET', '/livez')).status, 200);
+    });
+});
+
+test('a too short API key is refused at startup', () => {
+    const { createAuth } = require('../src/auth');
+    assert.throws(() => createAuth('short'), /too short/);
+    assert.doesNotThrow(() => createAuth(KEY));
+    assert.doesNotThrow(() => createAuth(''));
 });

@@ -9,6 +9,7 @@
 #   ./network.sh createChannel      create projects-channel, join both peers, set anchor peers
 #   ./network.sh deployCC           package/install/approve/commit the projectcc chaincode
 #   ./network.sh api                build + start the REST API container (joins the Fabric network)
+#   ./network.sh proxy -domain d    HTTPS reverse proxy (Caddy) for the REST API, for calls from the internet
 #   ./network.sh status             what is running
 #   ./network.sh down [-clean [-y]] stop the containers (-clean: ALSO delete ledgers, crypto, channel artifacts)
 #
@@ -43,6 +44,7 @@ else
 fi
 COMPOSE_FILES=(-f compose/compose-project-net.yaml -f compose/docker/docker-compose-project-net.yaml)
 API_COMPOSE_FILES=("${COMPOSE_FILES[@]}" -f compose/compose-api.yaml)
+PROXY_COMPOSE_FILES=("${API_COMPOSE_FILES[@]}" -f compose/compose-proxy.yaml)
 
 # Docker socket the peers use to build/run chaincode containers
 SOCK="${DOCKER_HOST:-/var/run/docker.sock}"
@@ -71,6 +73,7 @@ printHelp() {
   println "    ${C_GREEN}createChannel${C_RESET}  create the channel, join both peers, set anchor peers (starts the network if needed)"
   println "    ${C_GREEN}deployCC${C_RESET}       install + approve (both orgs) + commit the chaincode; skipped if this version is already committed"
   println "    ${C_GREEN}api${C_RESET}            build and start the REST API as a container (http://localhost:4000)"
+  println "    ${C_GREEN}proxy${C_RESET}          HTTPS in front of the API for the domain in -domain / PN_DOMAIN (needs API_KEY in api/.env)"
   println "    ${C_GREEN}status${C_RESET}         show containers, channel membership and the committed chaincode"
   println "    ${C_GREEN}down${C_RESET}           stop and remove the containers (ledgers are kept)"
   println
@@ -85,6 +88,7 @@ printHelp() {
   println "    -f             with deployCC: deploy again even if this version is already committed"
   println "    -clean         with down: ALSO delete ledgers (Docker volumes), crypto material and channel artifacts"
   println "    -y             with down -clean: do not ask for confirmation"
+  println "    -domain <name> with proxy: the public domain (for example chain.example.com)"
   println "    -verbose       print the CORE_* environment used for each peer command"
   println "    -h             this help"
 }
@@ -204,7 +208,7 @@ startApi() {
   joinNetwork
   local n
   for n in $(seq 1 30); do
-    if curl -fs -o /dev/null "$(nodeUrl projects-api 4000 /)"; then
+    if curl -fs -o /dev/null "$(nodeUrl projects-api 4000 /livez)"; then
       successln "REST API container is up: http://localhost:${API_PORT}  (logs: docker logs projects-api)"
       return 0
     fi
@@ -212,6 +216,18 @@ startApi() {
   done
   docker logs --tail 20 projects-api
   fatalln "The REST API container did not answer on port ${API_PORT}"
+}
+
+startProxy() {
+  [ -n "${PN_DOMAIN:-}" ] || fatalln "Give the public domain: ./pn start --domain chain.example.com"
+  [ -f api/.env ] || cp api/.env.example api/.env
+  grep -Eq '^API_KEY=[^[:space:]]{24,}' api/.env || fatalln "The proxy exposes the API to the internet, so it needs an API key. Run ./pn key, put the result in project-network/api/.env as API_KEY=..., then start again. (The proxy is never started without a key.)"
+  export PN_DOMAIN
+  ensureImage "caddy:2-alpine"
+  ${COMPOSE} "${PROXY_COMPOSE_FILES[@]}" up -d proxy 2>&1 || fatalln "Could not start the proxy"
+  successln "HTTPS proxy started for ${PN_DOMAIN}"
+  println "  Before it can get its certificate: a DNS \"A\" record for ${PN_DOMAIN} must point to this server, and ports 80 and 443 must be open."
+  println "  Watch it:  ./pn logs projects-proxy      Test:  curl -s https://${PN_DOMAIN}/livez"
 }
 
 networkStatus() {
@@ -250,7 +266,7 @@ networkDown() {
   docker rm -f $(docker ps -aq --filter name='dev-peer*') 2> /dev/null || true
 
   leaveNetwork
-  ${COMPOSE} "${API_COMPOSE_FILES[@]}" down --remove-orphans
+  ${COMPOSE} "${PROXY_COMPOSE_FILES[@]}" down --remove-orphans
 
   if [ "$CLEAN" = "true" ]; then
     docker volume rm "${PN_PROJECT}_orderer.example.com" "${PN_PROJECT}_peer0.platform.example.com" "${PN_PROJECT}_peer0.adminorg.example.com" 2> /dev/null || true
@@ -285,6 +301,7 @@ while [[ $# -ge 1 ]]; do
     -clean ) CLEAN=true ;;
     -y ) ASSUME_YES=true ;;
     -verbose ) VERBOSE=true ;;
+    -domain ) PN_DOMAIN="$2"; shift ;;
     * ) errorln "Unknown flag: $key"; printHelp; exit 1 ;;
   esac
   shift
@@ -296,6 +313,7 @@ case "$MODE" in
   createChannel ) infoln "Creating channel '${CHANNEL_NAME}'"; createChannel ;;
   deployCC )      infoln "Deploying chaincode '${CC_NAME}' on channel '${CHANNEL_NAME}'"; deployCC ;;
   api )           infoln "Starting the REST API container"; startApi ;;
+  proxy )         infoln "Starting the HTTPS proxy"; startProxy ;;
   status )        networkStatus ;;
   down )          infoln "Stopping network"; networkDown ;;
   * )             printHelp; exit 1 ;;

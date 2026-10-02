@@ -15,14 +15,16 @@ usage() {
   cat <<'USAGE'
 Usage: pn <command> [options]
 
-  start [--no-api] [--monitoring] [--download-fabric]
+  start [--no-api] [--monitoring] [--download-fabric] [--domain <name>]
                                     build and start everything: network, channel, chaincode, REST API
-                                    (--download-fabric fetches the Fabric 3.1.5 Linux tarball if it is not in the repository folder)
+                                    (--download-fabric fetches the Fabric 3.1.5 Linux tarball if it is not in the repository folder;
+                                     --domain publishes the API over HTTPS, needs an API_KEY)
   stop [--clean [--yes]]            stop everything (data is kept); --clean also deletes ledgers and certificates
   status                            containers, channel, committed chaincode
   logs [container]                  follow the logs (default: projects-api; e.g. orderer.example.com)
   monitoring [--down]               start/stop Prometheus + Grafana (http://localhost:3000)
   shell                             a shell inside the orchestrator (peer CLI as an org: . ./setOrgEnv.sh platform)
+  key                               print a new random API key (put it in api/.env as API_KEY=...)
   net <args>                        run ./network.sh with the given arguments (see: pn net -h)
 USAGE
 }
@@ -53,6 +55,7 @@ case "$CMD" in
   status)      sync_sources; cd /work/project-network; exec ./network.sh status ;;
   monitoring)  sync_sources; cd /work/project-network; exec ./start-monitoring.sh "$@" ;;
   net)         sync_sources; cd /work/project-network; exec ./network.sh "$@" ;;
+  key)         head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; echo; exit 0 ;;
   logs)        exec docker logs --tail 100 -f "${1:-projects-api}" ;;
   shell)       sync_sources; cd /work/project-network; export PATH="/work/bin:$PATH"; exec bash ;;
   help|-h|--help) usage ;;

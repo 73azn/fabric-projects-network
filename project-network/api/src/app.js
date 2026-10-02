@@ -3,11 +3,18 @@
 const express = require('express');
 const { projectsRouter } = require('./projects');
 const { HttpError, toHttpError } = require('./errors');
+const { createAuth } = require('./auth');
 
-function createApp({ fabric, health }) {
+function createApp({ fabric, health, apiKey = '' }) {
     const app = express();
     app.disable('x-powered-by');
     app.use(express.json({ limit: '1mb' }));
+
+    // Liveness for Docker and load balancers: public and tells nothing about the network
+    app.get('/livez', (_req, res) => res.json({ status: 'ok' }));
+
+    // Everything below needs the API key (when one is configured)
+    app.use(createAuth(apiKey));
 
     app.get('/', (_req, res) => {
         res.json({
@@ -45,6 +52,9 @@ function createApp({ fabric, health }) {
         }
         if (status === 503) {
             res.set('Retry-After', '5');
+        }
+        if (err && err.headers) {
+            res.set(err.headers);
         }
         res.status(status).json({ error: message, code });
     });

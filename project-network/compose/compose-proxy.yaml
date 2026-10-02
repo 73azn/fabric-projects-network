@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# HTTPS in front of the REST API, so another service (for example a Supabase Edge Function) can call it over the internet.
+# Started with:  ./pn start --domain chain.example.com      (needs API_KEY in api/.env; see docs/operations.md)
+#
+# Caddy gets and renews a Let's Encrypt certificate for the domain by itself. Requirements:
+#   - a DNS "A" record for the domain pointing at this server
+#   - ports 80 and 443 open in the server's firewall (80 is used to prove you own the domain)
+# For the domain "localhost" Caddy uses its own local certificate (handy for testing).
+
+services:
+  proxy:
+    container_name: projects-proxy
+    image: caddy:2-alpine
+    labels:
+      service: projects-proxy
+    command: caddy reverse-proxy --from ${PN_DOMAIN:-localhost} --to projects-api:4000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data       # keeps the certificate between restarts (Let's Encrypt limits how often you can ask)
+      - caddy_config:/config
+    restart: unless-stopped
+    networks:
+      - projects
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
