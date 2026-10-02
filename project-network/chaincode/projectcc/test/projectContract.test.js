@@ -63,7 +63,7 @@ test('CreateProject stores a project with no payments and sorted keys', async ()
     const parsed = JSON.parse(stored);
     assert.deepEqual(parsed.payments, []);
     assert.deepEqual(Object.keys(parsed), [...Object.keys(parsed)].sort());
-    assert.deepEqual(Object.keys(parsed.milestone[0]), ['description', 'finishDate', 'startDate']);
+    assert.deepEqual(Object.keys(parsed.milestone[0]), ['clientApproved', 'description', 'finishDate', 'startDate']);
     assert.equal(stored, stableStringify(parsed));
 });
 
@@ -74,7 +74,7 @@ test('CreateProject defaults currency to SAR, milestone to [] and dates to null'
     }));
     const p = JSON.parse(ctx.state.get('P2').toString());
     assert.equal(p.currency, 'SAR');
-    assert.deepEqual(p.milestone, [{ description: 'x', finishDate: null, startDate: null }]);
+    assert.deepEqual(p.milestone, [{ clientApproved: false, description: 'x', finishDate: null, startDate: null }]);
     await contract.CreateProject(ctx, JSON.stringify({ id: 'P3', owner: 'A', contractor: 'B', agreedPrice: 10 }));
     assert.deepEqual(JSON.parse(ctx.state.get('P3').toString()).milestone, []);
 });
@@ -245,4 +245,45 @@ test('isoFromTimestamp converts epoch seconds without Date', () => {
     assert.equal(isoFromTimestamp(951782400, 0), '2000-02-29T00:00:00.000Z');          // leap day
     assert.equal(isoFromTimestamp('1790000000', 123456789), new Date(1790000000 * 1000 + 123).toISOString());
     assert.equal(isoFromTimestamp(1709251199, 999000000), '2024-02-29T23:59:59.999Z');
+});
+
+test('clientApproved: true/false is stored, defaults to false, and only booleans are accepted', async () => {
+    const ctx = makeCtx();
+    const withTasks = (milestone) => JSON.stringify({ id: 'P-A', owner: 'o', contractor: 'c', agreedPrice: 100, milestone });
+    await contract.CreateProject(ctx, withTasks([
+        { description: 'agreed', clientApproved: true },
+        { description: 'not agreed', clientApproved: false },
+        { description: 'not said' },
+    ]));
+    const stored = JSON.parse(ctx.state.get('P-A').toString());
+    assert.deepEqual(stored.milestone.map((t) => t.clientApproved), [true, false, false]);
+
+    for (const bad of ['true', 'yes', 1, 0, null, {}, []]) {
+        await assert.rejects(
+            contract.CreateProject(makeCtx(), JSON.stringify({ id: 'P-B', owner: 'o', contractor: 'c', agreedPrice: 1, milestone: [{ description: 't', clientApproved: bad }] })),
+            asCode('INVALID_INPUT'), `clientApproved=${JSON.stringify(bad)}`);
+    }
+});
+
+test('clientApproved can be changed with UpdateProject and is kept by AddPayment', async () => {
+    const ctx = makeCtx();
+    await contract.CreateProject(ctx, JSON.stringify({ ...PROJECT, milestone: [{ description: 'Foundation' }, { description: 'Columns' }] }));
+    await contract.UpdateProject(ctx, JSON.stringify({ ...PROJECT, milestone: [{ description: 'Foundation', clientApproved: true }, { description: 'Columns' }] }));
+    await contract.AddPayment(ctx, 'PRJ-001', JSON.stringify(PAYMENT));
+    const p = JSON.parse(await contract.ReadProject(ctx, 'PRJ-001'));
+    assert.deepEqual(p.milestone.map((t) => [t.description, t.clientApproved]), [['Foundation', true], ['Columns', false]]);
+    assert.equal(p.payments.length, 1);
+});
+
+test('records stored before clientApproved existed read as false (also in the history)', async () => {
+    const ctx = makeCtx();
+    const old = { id: 'OLD-1', owner: 'o', contractor: 'c', agreedPrice: 10, currency: 'SAR', payments: [],
+        milestone: [{ description: 'legacy task', startDate: '2026-10-01', finishDate: null }] };
+    await ctx.stub.putState('OLD-1', Buffer.from(stableStringify(old)));   // written by the previous chaincode version
+    assert.equal(JSON.parse(await contract.ReadProject(ctx, 'OLD-1')).milestone[0].clientApproved, false);
+    const history = JSON.parse(await contract.GetProjectHistory(ctx, 'OLD-1'));
+    assert.equal(history[0].value.milestone[0].clientApproved, false);
+    // paying on an old project works and keeps its tasks
+    await contract.AddPayment(ctx, 'OLD-1', JSON.stringify({ id: 'PAY-1', amount: 5, date: '2026-10-02' }));
+    assert.equal(JSON.parse(await contract.ReadProject(ctx, 'OLD-1')).milestone[0].description, 'legacy task');
 });

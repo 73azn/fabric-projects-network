@@ -12,6 +12,7 @@ const {
     parseJson,
     requireId,
     totalPaid,
+    normalizeProject,
 } = require('./validation');
 
 // Only Platform may change data. Both organizations may read.
@@ -126,7 +127,7 @@ class ProjectContract extends Contract {
                     txId: item.txId,
                     timestamp: isoFromTimestamp(item.timestamp.seconds, item.timestamp.nanos),
                     isDelete: Boolean(item.isDelete),
-                    value: raw ? JSON.parse(raw) : null,
+                    value: raw ? normalizeProject(JSON.parse(raw)) : null,
                 });
             }
         } finally {
@@ -159,7 +160,7 @@ class ProjectContract extends Contract {
         if (!data || data.length === 0) {
             throw new ChaincodeError('NOT_FOUND', `project ${id} does not exist`);
         }
-        return JSON.parse(Buffer.from(data).toString('utf8'));
+        return normalizeProject(JSON.parse(Buffer.from(data).toString('utf8')));
     }
 }
 

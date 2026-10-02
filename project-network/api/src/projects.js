@@ -16,7 +16,12 @@ function presentProject(p) {
         contractor: p.contractor,
         agreedPrice: p.agreedPrice,
         currency: p.currency,
-        milestone: (p.milestone || []).map((t) => ({ description: t.description, startDate: t.startDate, finishDate: t.finishDate })),
+        milestone: (p.milestone || []).map((t) => ({
+            description: t.description,
+            startDate: t.startDate,
+            finishDate: t.finishDate,
+            clientApproved: t.clientApproved === true, // missing on projects stored before the field existed
+        })),
         payments: (p.payments || []).map((x) => ({ id: x.id, amount: x.amount, date: x.date, note: x.note })),
     };
 }

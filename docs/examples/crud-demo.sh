@@ -28,7 +28,7 @@ step "Health"
 call GET /health ""
 
 step "CREATE  POST /projects   (expect 201)"
-call POST /projects '{"id":"'"$ID"'","owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":250000,"currency":"SAR","milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"},{"description":"Build the ground floor columns","startDate":"2026-10-21","finishDate":null}]}'
+call POST /projects '{"id":"'"$ID"'","owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":250000,"currency":"SAR","milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20","clientApproved":true},{"description":"Build the ground floor columns","startDate":"2026-10-21","finishDate":null,"clientApproved":false}]}'
 
 step "READ  GET /projects/$ID   (expect 200, totalPaid 0)"
 call GET "/projects/$ID" ""
@@ -36,14 +36,17 @@ call GET "/projects/$ID" ""
 step "ADD PAYMENT  POST /projects/$ID/payments   (expect 201)"
 call POST "/projects/$ID/payments" '{"id":"PAY-1","amount":50000,"date":"2026-10-03","note":"First payment"}'
 
-step "UPDATE  PUT /projects/$ID   (expect 200; payments stay, price and tasks replaced)"
-call PUT "/projects/$ID" '{"owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":300000,"currency":"SAR","milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"},{"description":"Build the ground floor columns","startDate":"2026-10-21","finishDate":"2026-11-15"},{"description":"Roof slab","startDate":null,"finishDate":null}]}'
+step "UPDATE  PUT /projects/$ID   (expect 200; payments stay, price and tasks replaced; the client now agrees to task 2 too)"
+call PUT "/projects/$ID" '{"owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":300000,"currency":"SAR","milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20","clientApproved":true},{"description":"Build the ground floor columns","startDate":"2026-10-21","finishDate":"2026-11-15","clientApproved":true},{"description":"Roof slab","startDate":null,"finishDate":null,"clientApproved":false}]}'
 
 step "READ again   (totalPaid 50000, remaining 250000)"
 call GET "/projects/$ID" ""
 
 step "HISTORY  GET /projects/$ID/history   (3 versions, oldest first)"
 call GET "/projects/$ID/history" ""
+
+step "ERROR: clientApproved must be true or false   (expect 400)"
+call POST /projects '{"id":"'"$ID"'-Y","owner":"a","contractor":"b","agreedPrice":1,"milestone":[{"description":"t","clientApproved":"yes"}]}'
 
 step "ERROR: create the same id again   (expect 409 ALREADY_EXISTS)"
 call POST /projects '{"id":"'"$ID"'","owner":"x","contractor":"y","agreedPrice":1}'

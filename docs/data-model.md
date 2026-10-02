@@ -12,8 +12,8 @@ One project is one record on the blockchain, stored under its `id`. Example afte
   "agreedPrice": 250000,
   "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20" },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
   ],
   "payments": [
     { "id": "PAY-1", "amount": 50000, "date": "2026-10-03", "note": "First payment" }
@@ -31,7 +31,7 @@ One project is one record on the blockchain, stored under its `id`. Example afte
 | `milestone` | the **list of tasks** (the work plan) |
 | `payments` | money the **owner paid to the contractor** (starts empty) |
 
-A task in `milestone` has only: `description` (what will be done), `startDate`, `finishDate`. A payment has `id`, `amount`, `date`, `note`.
+A task in `milestone` has only: `description` (what will be done), `startDate`, `finishDate` and **`clientApproved`** (`true` if the client agreed to the task, `false` if not). A payment has `id`, `amount`, `date`, `note`.
 
 The API's answers add two **calculated** fields that are *not* stored on the chain: `totalPaid` (sum of the payments) and `remaining` (`agreedPrice − totalPaid`).
 
@@ -44,6 +44,10 @@ The API's answers add two **calculated** fields that are *not* stored on the cha
 **Dates:** real calendar dates written `YYYY-MM-DD` (so `2026-02-30` is rejected, and `2028-02-29` is accepted because 2028 is a leap year).
 A task's `startDate` is `null` until the task starts and its `finishDate` is `null` until it is finished.
 A task **cannot have a `finishDate` without a `startDate`**, and the `finishDate` cannot be **before** the `startDate`.
+
+**Client agreement (`clientApproved`):** `true` or `false` only (a string such as `"true"`, a number or `null` is rejected). If you leave it out it is `false`: the client has not agreed yet.
+It is a plain flag: it does not block starting or finishing a task. To change it, update the project and resend the tasks (see the API reference).
+Projects created before this field existed show `false` on all their tasks.
 
 **Payments:**
 * they can only be **added** (`POST …/payments`); they can never be edited or deleted;

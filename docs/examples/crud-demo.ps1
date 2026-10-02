@@ -40,8 +40,8 @@ Step 'CREATE  POST /projects   (expect 201)'
 Call POST '/projects' @{
     id = $Id; owner = 'Ahmed Ali'; contractor = 'Al-Bina Co.'; agreedPrice = 250000; currency = 'SAR'
     milestone = @(
-        @{ description = 'Dig and pour the foundation';    startDate = '2026-10-01'; finishDate = '2026-10-20' },
-        @{ description = 'Build the ground floor columns'; startDate = '2026-10-21'; finishDate = $null }
+        @{ description = 'Dig and pour the foundation';    startDate = '2026-10-01'; finishDate = '2026-10-20'; clientApproved = $true },
+        @{ description = 'Build the ground floor columns'; startDate = '2026-10-21'; finishDate = $null;         clientApproved = $false }
     )
 }
 
@@ -51,13 +51,13 @@ Call GET "/projects/$Id"
 Step "ADD PAYMENT  POST /projects/$Id/payments   (expect 201)"
 Call POST "/projects/$Id/payments" @{ id = 'PAY-1'; amount = 50000; date = '2026-10-03'; note = 'First payment' }
 
-Step "UPDATE  PUT /projects/$Id   (expect 200; payments stay, price and tasks replaced)"
+Step "UPDATE  PUT /projects/$Id   (expect 200; payments stay, price and tasks replaced; the client now agrees to task 2 too)"
 Call PUT "/projects/$Id" @{
     owner = 'Ahmed Ali'; contractor = 'Al-Bina Co.'; agreedPrice = 300000; currency = 'SAR'
     milestone = @(
-        @{ description = 'Dig and pour the foundation';    startDate = '2026-10-01'; finishDate = '2026-10-20' },
-        @{ description = 'Build the ground floor columns'; startDate = '2026-10-21'; finishDate = '2026-11-15' },
-        @{ description = 'Roof slab';                      startDate = $null;        finishDate = $null }
+        @{ description = 'Dig and pour the foundation';    startDate = '2026-10-01'; finishDate = '2026-10-20'; clientApproved = $true },
+        @{ description = 'Build the ground floor columns'; startDate = '2026-10-21'; finishDate = '2026-11-15'; clientApproved = $true },
+        @{ description = 'Roof slab';                      startDate = $null;        finishDate = $null;         clientApproved = $false }
     )
 }
 
@@ -66,6 +66,9 @@ Call GET "/projects/$Id"
 
 Step "HISTORY  GET /projects/$Id/history   (3 versions, oldest first)"
 Call GET "/projects/$Id/history"
+
+Step 'ERROR: clientApproved must be true or false   (expect 400)'
+Call POST '/projects' @{ id = "$Id-Y"; owner = 'a'; contractor = 'b'; agreedPrice = 1; milestone = @(@{ description = 't'; clientApproved = 'yes' }) }
 
 Step 'ERROR: create the same id again   (expect 409 ALREADY_EXISTS)'
 Call POST '/projects' @{ id = $Id; owner = 'x'; contractor = 'y'; agreedPrice = 1 }

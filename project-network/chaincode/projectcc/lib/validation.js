@@ -25,7 +25,7 @@ const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MAX_TEXT = 500;
 
 const PROJECT_FIELDS = ['id', 'owner', 'contractor', 'agreedPrice', 'currency', 'milestone', 'payments'];
-const TASK_FIELDS = ['description', 'startDate', 'finishDate'];
+const TASK_FIELDS = ['description', 'startDate', 'finishDate', 'clientApproved'];
 const PAYMENT_FIELDS = ['id', 'amount', 'date', 'note'];
 
 function isPlainObject(value) {
@@ -103,6 +103,17 @@ function optionalDate(value, name, what) {
     return value;
 }
 
+/** The client's agreement to a task: true or false. Missing means false (not agreed yet). */
+function optionalBoolean(value, name, what) {
+    if (value === undefined) {
+        return false;
+    }
+    if (typeof value !== 'boolean') {
+        throw invalid(`${what}: "${name}" must be true or false`);
+    }
+    return value;
+}
+
 function validateTask(task, index) {
     const what = `milestone[${index}]`;
     if (!isPlainObject(task)) {
@@ -119,7 +130,19 @@ function validateTask(task, index) {
     if (finishDate !== null && finishDate < startDate) {
         throw invalid(`${what}: finishDate (${finishDate}) cannot be before startDate (${startDate})`);
     }
-    return { description, startDate, finishDate };
+    const clientApproved = optionalBoolean(task.clientApproved, 'clientApproved', what);
+    return { description, startDate, finishDate, clientApproved };
+}
+
+/**
+ * Projects stored before the field "clientApproved" existed have tasks without it: they read as false.
+ * Pure function, used when reading, so every peer returns the same bytes.
+ */
+function normalizeProject(project) {
+    return {
+        ...project,
+        milestone: (project.milestone || []).map((task) => ({ ...task, clientApproved: task.clientApproved === true })),
+    };
 }
 
 function totalPaid(payments) {
@@ -199,4 +222,5 @@ module.exports = {
     parseJson,
     requireId,
     totalPaid,
+    normalizeProject,
 };

@@ -86,8 +86,8 @@ One asset per project, stored under its `id` (example after one payment):
   "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
   "agreedPrice": 250000, "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",     "startDate": "2026-10-01", "finishDate": "2026-10-20" },
-    { "description": "Build the ground floor columns",  "startDate": "2026-10-21", "finishDate": null }
+    { "description": "Dig and pour the foundation",     "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
+    { "description": "Build the ground floor columns",  "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
   ],
   "payments": [ { "id": "PAY-1", "amount": 50000, "date": "2026-10-03", "note": "First payment" } ]
 }

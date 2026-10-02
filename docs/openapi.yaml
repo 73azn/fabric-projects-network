@@ -37,8 +37,8 @@ paths:
               agreedPrice: 250000
               currency: SAR
               milestone:
-                - { description: Dig and pour the foundation, startDate: '2026-10-01', finishDate: '2026-10-20' }
-                - { description: Build the ground floor columns, startDate: '2026-10-21', finishDate: null }
+                - { description: Dig and pour the foundation, startDate: '2026-10-01', finishDate: '2026-10-20', clientApproved: true }
+                - { description: Build the ground floor columns, startDate: '2026-10-21', finishDate: null, clientApproved: false }
       responses:
         '201':
           description: Created
@@ -191,6 +191,10 @@ components:
           format: date
           nullable: true
           description: 'null until the task is finished. Needs a startDate and cannot be before it.'
+        clientApproved:
+          type: boolean
+          default: false
+          description: 'true if the client agreed to this task, false if not (also when omitted)'
     Payment:
       type: object
       required: [id, amount, date]

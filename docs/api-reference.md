@@ -52,6 +52,7 @@ Each task in `milestone`:
 | `description` | yes | what will be done |
 | `startDate` | no | `YYYY-MM-DD`, or `null` until the task starts |
 | `finishDate` | no | `YYYY-MM-DD`, or `null` until it is finished. Needs a `startDate`, and cannot be before it |
+| `clientApproved` | no | `true` if the **client agreed to this task**, `false` if not. Default `false`. Only `true`/`false` are accepted (not `"true"`, `1` or `null`) |
 
 Unknown fields are rejected.
 
@@ -63,8 +64,8 @@ curl -s -X POST $B/projects -H "$J" -d '{
   "agreedPrice": 250000,
   "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20" },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
   ]
 }'
 ```
@@ -83,8 +84,8 @@ Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json
   "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
   "agreedPrice": 250000, "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20" },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "clientApproved": false }
   ],
   "payments": [],
   "totalPaid": 0,
@@ -121,6 +122,7 @@ Errors: `404` no such project.
 Replaces `owner`, `contractor`, `agreedPrice`, `currency` and the **whole** `milestone` list. Send the complete new data, as in *Create* (without `id`, or with the same id as in the URL).
 
 * **A missing `milestone` becomes an empty list**, so always send the full task list you want to keep.
+* **To record that the client agreed to a task** (or withdrew), update the project and send the task list again with that task's `clientApproved` set to `true` (or `false`). A task you send without `clientApproved` becomes `false`, so repeat it for the tasks that are already agreed.
 * The **id** and the **payments cannot be changed** here. You may send `payments` back unchanged; anything else is rejected with `400`.
 * `agreedPrice` cannot be set below what has already been paid.
 * `totalPaid` and `remaining` are ignored if you send them back (handy when you edit a project you just read).
@@ -132,9 +134,9 @@ curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
   "agreedPrice": 300000,
   "currency": "SAR",
   "milestone": [
-    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20" },
-    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": "2026-11-15" },
-    { "description": "Roof slab", "startDate": null, "finishDate": null }
+    { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "clientApproved": true },
+    { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": "2026-11-15", "clientApproved": true },
+    { "description": "Roof slab", "startDate": null, "finishDate": null, "clientApproved": false }
   ]
 }'
 ```
@@ -265,7 +267,7 @@ Every error has the same shape: `{ "error": "<what is wrong>", "code": "<CODE>" 
 
 Typical `400` messages: `"agreedPrice" must be greater than 0` · `finishDate (…) cannot be before startDate (…)` · `a task cannot have a finishDate without a startDate` ·
 `payment id PAY-1 already exists in project PRJ-001` · `payments cannot be changed with UpdateProject; use AddPayment` ·
-`agreedPrice (100) cannot be less than the total already paid (50000)` · `"date" … must be a real date in YYYY-MM-DD format` (for example `2026-02-30` is rejected).
+`agreedPrice (100) cannot be less than the total already paid (50000)` · `"clientApproved" must be true or false` · `"date" … must be a real date in YYYY-MM-DD format` (for example `2026-02-30` is rejected).
 
 > **After restarting a peer**, a *write* can return `503` for up to about half a minute until the peers see each other again. Just retry.
 
