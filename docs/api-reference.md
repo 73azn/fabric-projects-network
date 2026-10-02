@@ -17,7 +17,7 @@ There is **no delete**: that is by design. Projects stay on the ledger, and paym
 
 * **Who is calling** — header `X-Org: platform` (default) or `X-Org: admin`. `platform` can read and write; `admin` (the AdminOrg user) can only read: a write returns `403`.
   There is **no password or token**: see [security](operations.md#security).
-* **Money** — SAR with **at most 2 decimals** (like Supabase `numeric(12,2)`), for example `250000`, `250000.5`, `99.99`; at most `9999999999.99`. Totals are exact. **Dates** — `YYYY-MM-DD`.
+* **Money** — SAR with **at most 2 decimals** (like a database `numeric(12,2)` column), for example `250000`, `250000.75`, `99.99`; at most `9999999999.99`. Totals are exact. **Dates** — `YYYY-MM-DD`.
 * **Content type** — send `Content-Type: application/json` with a body.
 * **Writes take about a second or two**: both organizations must approve and the block has to be committed before the answer comes back.
 * The examples below use `curl` (macOS, Linux, WSL, Git Bash). Set these once:
@@ -52,7 +52,7 @@ Each task in `milestone`:
 | `description` | yes | what will be done, 1 to **5000** characters |
 | `startDate` | no | `YYYY-MM-DD`, or `null` until the task starts |
 | `finishDate` | no | `YYYY-MM-DD`, or `null` until it is finished. Needs a `startDate`, and cannot be before it |
-| `status` | no | where the task stands, the same values as in Watad: `proposed` (default), `accepted`, `done`, `approved`, `rejected` |
+| `status` | no | where the task stands: `proposed` (default), `accepted`, `done`, `approved`, `rejected` |
 
 The **finish date exists exactly when the status is `done` or `approved`** (so `finishDate` is `null` for `proposed`, `accepted` and `rejected`), and it needs a `startDate` and cannot be before it.
 Unknown fields are rejected.
@@ -62,7 +62,7 @@ curl -s -X POST $B/projects -H "$J" -d '{
   "id": "PRJ-001",
   "owner": "Ahmed Ali",
   "contractor": "Al-Bina Co.",
-  "agreedPrice": 250000,
+  "agreedPrice": 250000.75,
   "currency": "SAR",
   "milestone": [
     { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
@@ -75,7 +75,7 @@ PowerShell:
 
 ```powershell
 $B = 'http://localhost:4000'
-Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json' -Body '{"id":"PRJ-001","owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":250000,"milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"}]}'
+Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json' -Body '{"id":"PRJ-001","owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":250000.75,"milestone":[{"description":"Dig and pour the foundation","startDate":"2026-10-01","finishDate":"2026-10-20"}]}'
 ```
 
 **`201 Created`** — the project, with no payments yet:
@@ -83,14 +83,14 @@ Invoke-RestMethod -Method Post -Uri "$B/projects" -ContentType 'application/json
 ```json
 {
   "id": "PRJ-001", "owner": "Ahmed Ali", "contractor": "Al-Bina Co.",
-  "agreedPrice": 250000, "currency": "SAR",
+  "agreedPrice": 250000.75, "currency": "SAR",
   "milestone": [
     { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
     { "description": "Build the ground floor columns", "startDate": "2026-10-21", "finishDate": null,         "status": "proposed" }
   ],
   "payments": [],
   "totalPaid": 0,
-  "remaining": 250000
+  "remaining": 250000.75
 }
 ```
 
@@ -132,7 +132,7 @@ Replaces `owner`, `contractor`, `agreedPrice`, `currency` and the **whole** `mil
 curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
   "owner": "Ahmed Ali",
   "contractor": "Al-Bina Co.",
-  "agreedPrice": 300000,
+  "agreedPrice": 300000.75,
   "currency": "SAR",
   "milestone": [
     { "description": "Dig and pour the foundation",    "startDate": "2026-10-01", "finishDate": "2026-10-20", "status": "done" },
@@ -143,7 +143,7 @@ curl -s -X PUT $B/projects/PRJ-001 -H "$J" -d '{
 ```
 
 ```powershell
-Invoke-RestMethod -Method Put -Uri "$B/projects/PRJ-001" -ContentType 'application/json' -Body '{"owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":300000,"milestone":[{"description":"Roof slab","startDate":null,"finishDate":null}]}'
+Invoke-RestMethod -Method Put -Uri "$B/projects/PRJ-001" -ContentType 'application/json' -Body '{"owner":"Ahmed Ali","contractor":"Al-Bina Co.","agreedPrice":300000.75,"milestone":[{"description":"Roof slab","startDate":null,"finishDate":null}]}'
 ```
 
 **`200 OK`** — the updated project. Errors: `400` · `403` · `404`.
@@ -167,19 +167,19 @@ The **total of all payments can never be more than `agreedPrice`** (paying exact
 
 ```bash
 curl -s -X POST $B/projects/PRJ-001/payments -H "$J" \
-  -d '{"id":"PAY-1","amount":50000,"date":"2026-10-03","note":"First payment"}'
+  -d '{"id":"PAY-1","amount":50000.25,"date":"2026-10-03","note":"First payment"}'
 ```
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "$B/projects/PRJ-001/payments" -ContentType 'application/json' -Body '{"id":"PAY-1","amount":50000,"date":"2026-10-03","note":"First payment"}'
+Invoke-RestMethod -Method Post -Uri "$B/projects/PRJ-001/payments" -ContentType 'application/json' -Body '{"id":"PAY-1","amount":50000.25,"date":"2026-10-03","note":"First payment"}'
 ```
 
 **`201 Created`**
 
 ```json
 {
-  "payment": { "id": "PAY-1", "amount": 50000, "date": "2026-10-03", "note": "First payment" },
-  "project": { "id": "PRJ-001", "...": "...", "payments": [ { "id": "PAY-1", "...": "..." } ], "totalPaid": 50000, "remaining": 250000 }
+  "payment": { "id": "PAY-1", "amount": 50000.25, "date": "2026-10-03", "note": "First payment" },
+  "project": { "id": "PRJ-001", "...": "...", "payments": [ { "id": "PAY-1", "...": "..." } ], "totalPaid": 50000.25, "remaining": 250000.5 }
 }
 ```
 
@@ -206,9 +206,9 @@ Invoke-RestMethod "$B/projects/PRJ-001/history"
 ```json
 [
   { "txId": "884bae89d573…", "timestamp": "2026-09-30T17:29:23.299Z", "isDelete": false,
-    "value": { "id": "PRJ-001", "agreedPrice": 250000, "payments": [], "...": "..." } },
+    "value": { "id": "PRJ-001", "agreedPrice": 250000.75, "payments": [], "...": "..." } },
   { "txId": "d59d08e96ff1…", "timestamp": "2026-09-30T17:29:25.386Z", "isDelete": false,
-    "value": { "id": "PRJ-001", "agreedPrice": 250000, "payments": [ { "id": "PAY-1", "...": "..." } ], "...": "..." } }
+    "value": { "id": "PRJ-001", "agreedPrice": 250000.75, "payments": [ { "id": "PAY-1", "...": "..." } ], "...": "..." } }
 ]
 ```
 
@@ -258,7 +258,7 @@ Every error has the same shape: `{ "error": "<what is wrong>", "code": "<CODE>" 
 
 | HTTP | `code` | Meaning | Example |
 |---|---|---|---|
-| 400 | `INVALID_INPUT` | The data is wrong | `payment of 999999 would make the total paid (1049999) exceed the agreed price (300000)` |
+| 400 | `INVALID_INPUT` | The data is wrong | `payment of 999999 would make the total paid (1049999.25) exceed the agreed price (300000.75)` |
 | 403 | `FORBIDDEN` | This organization may not do that | `organization AdminOrgMSP is not allowed to create projects` |
 | 404 | `NOT_FOUND` | No such project (or route) | `project NOPE does not exist` |
 | 409 | `ALREADY_EXISTS` | The id is taken | `project PRJ-001 already exists` |
@@ -268,7 +268,7 @@ Every error has the same shape: `{ "error": "<what is wrong>", "code": "<CODE>" 
 
 Typical `400` messages: `"agreedPrice" must be greater than 0` · `finishDate (…) cannot be before startDate (…)` · `a task cannot have a finishDate without a startDate` ·
 `payment id PAY-1 already exists in project PRJ-001` · `payments cannot be changed with UpdateProject; use AddPayment` ·
-`agreedPrice (100) cannot be less than the total already paid (50000)` · `"status" must be one of proposed, accepted, done, approved, rejected` · `status "done" needs a finishDate` · `finishDate can only be set when the status is done or approved` · `"amount" must have at most 2 decimals` · `"date" … must be a real date in YYYY-MM-DD format` (for example `2026-02-30` is rejected).
+`agreedPrice (100) cannot be less than the total already paid (50000.25)` · `"status" must be one of proposed, accepted, done, approved, rejected` · `status "done" needs a finishDate` · `finishDate can only be set when the status is done or approved` · `"amount" must have at most 2 decimals` · `"date" … must be a real date in YYYY-MM-DD format` (for example `2026-02-30` is rejected).
 
 > **After restarting a peer**, a *write* can return `503` for up to about half a minute until the peers see each other again. Just retry.
 

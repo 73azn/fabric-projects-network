@@ -8,8 +8,9 @@ and every payment. Once written, nothing is silently changed: each change is a n
 | [getting-started.md](getting-started.md) | Install, **start**, stop, first request. Windows, macOS and Linux. |
 | [api-reference.md](api-reference.md) | Every endpoint: **create, read, update, add payment, history, health**, with `curl`, PowerShell, JavaScript and Python examples and all error codes. |
 | [data-model.md](data-model.md) | What a project looks like, the validation rules, who is allowed to do what. |
+| [integration.md](integration.md) | Connecting another system: what to send, when to call the API, retries, who may call it. |
 | [operations.md](operations.md) | Day-to-day: status, logs, health, monitoring (Grafana), settings, upgrading, resetting, security. |
-| [watad-mapping.md](watad-mapping.md) | How the blockchain record lines up with the Watad (Supabase) tables, and what was changed there. |
+| [changelog.md](changelog.md) | What changed in each chaincode / API version (1.0 → 1.3). |
 | [architecture.md](architecture.md) | How it is built: containers, ports, volumes, how a write flows through the network. |
 | [troubleshooting.md](troubleshooting.md) | Something does not work. |
 | [openapi.yaml](openapi.yaml) | The API as an OpenAPI 3 file: import it into Postman, Insomnia or Swagger UI. |

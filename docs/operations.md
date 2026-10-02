@@ -57,7 +57,7 @@ After changing the file or the API code run `./pn net api` (rebuilds and restart
 
 ## Upgrading the chaincode
 
-Change the code in `project-network/chaincode/projectcc/`, raise `CC_VERSION` in `network.config` (for example `1.2` → `1.3`), then:
+Change the code in `project-network/chaincode/projectcc/`, raise `CC_VERSION` in `network.config` (for example `1.3` → `1.4`), then:
 
 ```bash
 ./pn start

@@ -9,7 +9,7 @@ info:
 
     * The header `X-Org` selects whose identity signs the request: `platform` (default, can read and write)
       or `admin` (can only read).
-    * Money is SAR with at most 2 decimals (like Watad `numeric(12,2)`). Dates are `YYYY-MM-DD`.
+    * Money is SAR with at most 2 decimals (like a database `numeric(12,2)` column). Dates are `YYYY-MM-DD`.
     * **The API has no authentication.** Keep it on localhost or put an authenticating proxy in front of it.
 servers:
   - url: http://localhost:4000
@@ -196,7 +196,7 @@ components:
           enum: [proposed, accepted, done, approved, rejected]
           default: proposed
           description: |
-            Where the task stands (same values as task_status in Watad). `finishDate` exists exactly when the status is `done` or `approved`.
+            Where the task stands. `finishDate` exists exactly when the status is `done` or `approved`.
     Payment:
       type: object
       required: [id, amount, date]
